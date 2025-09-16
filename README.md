@@ -1,5 +1,7 @@
 # QuestLog_Front
-WelcomScreen -> LoginScreen
+WelcomScreen -> LoginScreen </br>
+# Design
+assets/images -> 이미지 파일 업로드
 </br>
 # Create
 패키지 이름: com.example.questlog</br>
