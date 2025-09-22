@@ -18,12 +18,8 @@ class HomeScreen extends StatelessWidget {
             children: [
               // 상단 플레이어 정보 영역
               _buildTopInfoSection(),
-              
               // 중앙 퀘스트 스크롤 영역
-              Expanded(
-                child: _buildQuestScrollSection(),
-              ),
-              
+              Expanded(child: _buildQuestScrollSection()),
               // 하단 시작 버튼
               _buildBottomButtonSection(),
             ],
@@ -36,127 +32,84 @@ class HomeScreen extends StatelessWidget {
   Widget _buildTopInfoSection() {
     return Container(
       padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-      ),
+      decoration: const BoxDecoration(color: Colors.transparent),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 왼쪽 섹션: 캐릭터 아이콘과 HP/XP 바, 골드, 캘린더
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 캐릭터 아이콘과 HP/XP 바
-              Row(
-                children: [
-                  // 캐릭터 아이콘
-                  Image.asset(
-                    'assets/images/Icon_MyPage.png',
-                    width: 80,
-                    height: 80,
-                  ),
-                  
-                  const SizedBox(width: 16),
-                  
-                  // HP/XP 바들
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // HP 바
-                      Row(
+          // 왼쪽 섹션
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 캐릭터 + HP/XP
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Image.asset('assets/images/Icon_MyPage.png', width: 80, height: 80),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'HP',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 24,
-                              fontFamily: 'DungGeunMo',
-                            ),
+                          Row(
+                            children: [
+                              const Text('HP', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 70,
+                                  child: Image.asset(
+                                    'assets/images/Icon_HPBar_10.png',
+                                    fit: BoxFit.fitWidth,
+                                    alignment: Alignment.centerLeft,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Image.asset(
-                            'assets/images/Icon_HpBar_10.png',
-                            width: 160,
-                            height: 30,
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Text('XP', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 70,
+                                  child: Image.asset(
+                                    'assets/images/Icon_XpBar_10.png',
+                                    fit: BoxFit.fitWidth,
+                                    alignment: Alignment.centerLeft,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      
-                      const SizedBox(height: 8),
-                      
-                      // XP 바
-                      Row(
-                        children: [
-                          const Text(
-                            'XP',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 24,
-                              fontFamily: 'DungGeunMo',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Image.asset(
-                            'assets/images/Icon_XpBar_10.png',
-                            width: 160,
-                            height: 30,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // 골드
-              Row(
-                children: [
-                  Image.asset(
-                    'assets/images/Icon_Gold.png',
-                    width: 60,
-                    height: 60,
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    '2500',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 20,
-                      fontFamily: 'DungGeunMo',
                     ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 8),
-              
-              // 캘린더 아이콘
-              Image.asset(
-                'assets/images/Icon_Calendar.png',
-                width: 60,
-                height: 60,
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Image.asset('assets/images/Icon_Gold.png', width: 70, height: 70),
+                    const SizedBox(width: 4),
+                    const Text('2500', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Image.asset('assets/images/Icon_Calendar.png', width: 60, height: 60),
+              ],
+            ),
           ),
-          
-          const Spacer(),
-          
-          // 오른쪽 섹션: 가방과 상점 아이콘들 (더 아래로)
+          const SizedBox(width: 12),
+          // 오른쪽 섹션: 가방/상점
           Column(
             children: [
-              const SizedBox(height: 100), // 더 많이 아래로 이동
-              Image.asset(
-                'assets/images/Icon_Backpack.png',
-                width: 60,
-                height: 60,
-              ),
+              const SizedBox(height: 140),
+              Image.asset('assets/images/Icon_Backpack.png', width: 60, height: 60),
               const SizedBox(height: 8),
-              Image.asset(
-                'assets/images/Icon_Shop.png',
-                width: 60,
-                height: 60,
-              ),
+              Image.asset('assets/images/Icon_Shop.png', width: 60, height: 60),
             ],
           ),
         ],
@@ -174,8 +127,8 @@ class HomeScreen extends StatelessWidget {
             // 맵 이미지 (여백 최소화)
             Image.asset(
               'assets/images/map.png',
-              width: 700,
-              height: 900,
+              width: 900,
+              height: 1300,
             ),
             
             // 퀘스트 텍스트
