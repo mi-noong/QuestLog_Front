@@ -34,6 +34,13 @@ dependencies:
   # HTTP requests
   http: ^1.1.0
 
+  # Local notifications
+  flutter_local_notifications: ^17.2.1
+  timezone: ^0.9.2
+
+  # Local storage
+  shared_preferences: ^2.2.2
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -62,6 +69,8 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/images/BasicClothes.png
+    - assets/images/Female_Character.png
     - assets/images/FightScrenn.png
     - assets/images/GridScreen.png
     - assets/images/Icon_Backpack.png
@@ -93,14 +102,31 @@ flutter:
     - assets/images/Icon_XpBar_7.png
     - assets/images/Icon_XpBar_8.png
     - assets/images/Icon_XpBar_9.png
+    - assets/images/InventoryFrame.png
     - assets/images/InputBar.png
+    - assets/images/Leather_Armor.png
     - assets/images/LoginBackGround.png
     - assets/images/LoginButton.png
+    - assets/images/MagicPotion.png
     - assets/images/MainButton.png
     - assets/images/MainForestScreen.png
+    - assets/images/MaleCharacter.png
     - assets/images/map_Quest.png
     - assets/images/map.png
+    - assets/images/Pet_Cat.png
+    - assets/images/Quest_Background.png
+    - assets/images/Quest_Category.png
+    - assets/images/Quest_Input.png
+    - assets/images/Quest_MemoInput.png
+    - assets/images/Quest_TimeInput.png
     - assets/images/QuestLog_logo.png
+    - assets/images/StoreBuy_OK_Button.png
+    - assets/images/StoreBuyFrame.png
+    - assets/images/StoreItemFrame.png
+    - assets/images/wooden_sword.png
+    - assets/images/WoodenStick.png
+    - assets/images/MainButtonSquare.png
+    - assets/images/Mypage_Item.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
