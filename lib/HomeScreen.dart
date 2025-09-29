@@ -171,51 +171,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildQuestScrollSection() {
-    return Container(
-      child: SingleChildScrollView(
-        child: Center(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // 맵 이미지 (여백 최소화)
-              Image.asset(
-                'assets/images/map.png',
-                width: 400,
-                height: 480,
-                fit: BoxFit.contain,
-              ),
-
-              // 퀘스트 텍스트
-              const Positioned(
-                top: 0,
-                bottom: 0,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Please Enter',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'the quest',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return const _QuestMapSection();
   }
 
   Widget _buildBottomButtonSection(BuildContext context) {
@@ -247,6 +203,74 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuestMapSection extends StatefulWidget {
+  const _QuestMapSection({Key? key}) : super(key: key);
+
+  @override
+  State<_QuestMapSection> createState() => _QuestMapSectionState();
+}
+
+class _QuestMapSectionState extends State<_QuestMapSection> {
+  bool _isQuestMap = false;
+
+  void _toggleMap() {
+    setState(() {
+      _isQuestMap = !_isQuestMap;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      child: SingleChildScrollView(
+        child: Center(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleMap,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.asset(
+                  _isQuestMap ? 'assets/images/map_Quest.png' : 'assets/images/map.png',
+                  width: 400,
+                  height: 480,
+                  fit: BoxFit.contain,
+                ),
+                if (!_isQuestMap)
+                  const Positioned(
+                    top: 0,
+                    bottom: 0,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Please Enter',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'the quest',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
