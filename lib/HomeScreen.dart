@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  static const double _statusBarHeight = 46; // HP/XP 바 높이만 조정
+  static const double _statusBarLeftOffset = 8; // HP/XP 바를 오른쪽으로 이동
+  bool _isQuestMap = false;
 
   @override
   Widget build(BuildContext context) {
@@ -56,12 +65,15 @@ class HomeScreen extends StatelessWidget {
                               const Text('HP', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
                               const SizedBox(width: 4),
                               Expanded(
-                                child: SizedBox(
-                                  height: 70,
-                                  child: Image.asset(
-                                    'assets/images/Icon_HPBar_10.png',
-                                    fit: BoxFit.fitWidth,
-                                    alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: _statusBarLeftOffset),
+                                  child: SizedBox(
+                                    height: _statusBarHeight,
+                                    child: Image.asset(
+                                      'assets/images/Icon_HPBar_10.png',
+                                      fit: BoxFit.fitWidth,
+                                      alignment: Alignment.centerLeft,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -73,12 +85,15 @@ class HomeScreen extends StatelessWidget {
                               const Text('XP', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
                               const SizedBox(width: 4),
                               Expanded(
-                                child: SizedBox(
-                                  height: 70,
-                                  child: Image.asset(
-                                    'assets/images/Icon_XpBar_10.png',
-                                    fit: BoxFit.fitWidth,
-                                    alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: _statusBarLeftOffset),
+                                  child: SizedBox(
+                                    height: _statusBarHeight,
+                                    child: Image.asset(
+                                      'assets/images/Icon_XpBar_10.png',
+                                      fit: BoxFit.fitWidth,
+                                      alignment: Alignment.centerLeft,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -92,13 +107,13 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Image.asset('assets/images/Icon_Gold.png', width: 70, height: 70),
+                    Image.asset('assets/images/Icon_Gold.png', width: 91, height: 91),
                     const SizedBox(width: 4),
                     const Text('2500', style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'DungGeunMo')),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Image.asset('assets/images/Icon_Calendar.png', width: 60, height: 60),
+                Image.asset('assets/images/Icon_Calendar.png', width: 78, height: 78),
               ],
             ),
           ),
@@ -106,10 +121,10 @@ class HomeScreen extends StatelessWidget {
           // 오른쪽 섹션: 가방/상점
           Column(
             children: [
-              const SizedBox(height: 140),
-              Image.asset('assets/images/Icon_Backpack.png', width: 60, height: 60),
+              const SizedBox(height: 110),
+              Image.asset('assets/images/Icon_Backpack.png', width: 78, height: 78),
               const SizedBox(height: 8),
-              Image.asset('assets/images/Icon_Shop.png', width: 60, height: 60),
+              Image.asset('assets/images/Icon_Shop.png', width: 78, height: 78),
             ],
           ),
         ],
@@ -121,45 +136,53 @@ class HomeScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.all(16.0),
       child: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // 맵 이미지 (여백 최소화)
-            Image.asset(
-              'assets/images/map.png',
-              width: 900,
-              height: 1300,
-            ),
-            
-            // 퀘스트 텍스트
-            const Positioned(
-              top: 0,
-              bottom: 0,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Please Enter',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 28,
-                      fontFamily: 'DungGeunMo',
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'the quest',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 28,
-                      fontFamily: 'DungGeunMo',
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              _isQuestMap = !_isQuestMap;
+            });
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 맵 이미지 (여백 최소화)
+              Image.asset(
+                _isQuestMap ? 'assets/images/map_Quest.png' : 'assets/images/map.png',
+                width: 900,
+                height: 1300,
               ),
-            ),
-          ],
+
+              // 퀘스트 텍스트 (퀘스트 맵이 아닐 때만 표시)
+              if (!_isQuestMap)
+                const Positioned(
+                  top: 0,
+                  bottom: 0,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Please Enter',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 28,
+                          fontFamily: 'DungGeunMo',
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'the quest',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 28,
+                          fontFamily: 'DungGeunMo',
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
