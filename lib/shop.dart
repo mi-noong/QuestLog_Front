@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'HomeScreen.dart';
 
 final baseUrl = 'http://192.168.219.110:8083';
 
@@ -173,75 +174,165 @@ class _ShopScreenState extends State<ShopScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Shop 제목
-                Text(
-                  'Shop',
-                  style: TextStyle(
-                    fontSize: 48,  // 24 * 2
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                    fontFamily: 'DungGeunMo',
-                  ),
+                const SizedBox(height: 20), // 상단 여백 추가
+                // 홈 버튼과 Shop 제목을 같은 높이에 배치
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // 홈 버튼 (왼쪽)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HomeScreen()),
+                          );
+                        },
+                        child: Image.asset(
+                          'assets/images/BackButton.png',
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    // Shop 제목 (가운데)
+                    Text(
+                      'Shop',
+                      style: TextStyle(
+                        fontSize: 48,  // 24 * 2
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                        fontFamily: 'DungGeunMo',
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                    // 오른쪽 공간 (대칭을 위해)
+                    SizedBox(width: 48), // 홈 버튼과 같은 너비
+                  ],
                 ),
                 const SizedBox(height: 40),
                 // 상점 아이템들
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // 첫 번째 줄: Leather Armor, Wooden Sword
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildShopItem(
-                            'assets/images/StoreItemFrame.png',
-                            'assets/images/Leather_Armor.png',
-                            'Leather Armor',
-                            10,
-                            ShopItem(
-                              itemId: 'leather_armor',
-                              name: 'Leather Armor',
-                              description: '가죽 갑옷',
-                              price: 10,
-                              itemType: 'ARMOR',
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      final isTablet = screenWidth > 600;
+                      
+                      if (isTablet) {
+                        // 태블릿: 기존 레이아웃 유지
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 첫 번째 줄: Leather Armor, Wooden Sword
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/Leather_Armor.png',
+                                  'Leather Armor',
+                                  10,
+                                  ShopItem(
+                                    itemId: 'leather_armor',
+                                    name: 'Leather Armor',
+                                    description: '가죽 갑옷',
+                                    price: 10,
+                                    itemType: 'ARMOR',
+                                  ),
+                                ),
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/wooden_sword.png',
+                                  'Wooden Sword',
+                                  10,
+                                  ShopItem(
+                                    itemId: 'wooden_sword',
+                                    name: 'Wooden Sword',
+                                    description: '나무 검',
+                                    price: 10,
+                                    itemType: 'WEAPON',
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          _buildShopItem(
-                            'assets/images/StoreItemFrame.png',
-                            'assets/images/wooden_sword.png',
-                            'Wooden Sword',
-                            10,
-                            ShopItem(
-                              itemId: 'wooden_sword',
-                              name: 'Wooden Sword',
-                              description: '나무 검',
-                              price: 10,
-                              itemType: 'WEAPON',
+                            const SizedBox(height: 20),
+                            // 두 번째 줄: Potion
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/MagicPotion.png',
+                                  'Potion',
+                                  40,
+                                  ShopItem(
+                                    itemId: 'magic_potion',
+                                    name: 'Potion',
+                                    description: '마법 포션',
+                                    price: 40,
+                                    itemType: 'POTION',
+                                  ),
+                                ),
+                              ],
                             ),
+                          ],
+                        );
+                      } else {
+                        // 스마트폰: 세로 배치로 변경
+                        return SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 20),
+                              _buildShopItem(
+                                'assets/images/StoreItemFrame.png',
+                                'assets/images/Leather_Armor.png',
+                                'Leather Armor',
+                                10,
+                                ShopItem(
+                                  itemId: 'leather_armor',
+                                  name: 'Leather Armor',
+                                  description: '가죽 갑옷',
+                                  price: 10,
+                                  itemType: 'ARMOR',
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              _buildShopItem(
+                                'assets/images/StoreItemFrame.png',
+                                'assets/images/wooden_sword.png',
+                                'Wooden Sword',
+                                10,
+                                ShopItem(
+                                  itemId: 'wooden_sword',
+                                  name: 'Wooden Sword',
+                                  description: '나무 검',
+                                  price: 10,
+                                  itemType: 'WEAPON',
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              _buildShopItem(
+                                'assets/images/StoreItemFrame.png',
+                                'assets/images/MagicPotion.png',
+                                'Potion',
+                                40,
+                                ShopItem(
+                                  itemId: 'magic_potion',
+                                  name: 'Potion',
+                                  description: '마법 포션',
+                                  price: 40,
+                                  itemType: 'POTION',
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // 두 번째 줄: Potion
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildShopItem(
-                            'assets/images/StoreItemFrame.png',
-                            'assets/images/MagicPotion.png',
-                            'Potion',
-                            40,
-                            ShopItem(
-                              itemId: 'magic_potion',
-                              name: 'Potion',
-                              description: '마법 포션',
-                              price: 40,
-                              itemType: 'POTION',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                        );
+                      }
+                    },
                   ),
                 ),
                 // 하단 Start 버튼
@@ -261,15 +352,15 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildShopItem(String framePath, String itemPath, String itemName, int price, ShopItem shopItem) {
-    // 화면 크기에 따른 반응형 크기 조정
+    // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     
-    final itemWidth = isTablet ? 240.0 : 180.0;  // 160*1.5, 120*1.5
-    final itemHeight = isTablet ? 270.0 : 210.0;  // 180*1.5, 140*1.5
-    final imageSize = isTablet ? 120.0 : 90.0;    // 80*1.5, 60*1.5
-    final fontSize = isTablet ? 21.0 : 18.0;      // 14*1.5, 12*1.5
-    final priceFontSize = isTablet ? 24.0 : 21.0; // 16*1.5, 14*1.5
+    final itemWidth = isTablet ? 240.0 : screenWidth * 0.4;
+    final itemHeight = isTablet ? 270.0 : itemWidth * 1.125; // 비율 유지
+    final imageSize = isTablet ? 120.0 : itemWidth * 0.5;
+    final fontSize = isTablet ? 21.0 : 16.0;
+    final priceFontSize = isTablet ? 24.0 : 18.0;
     
     return GestureDetector(
       onTap: () => _showBuyDialog(shopItem),
@@ -301,7 +392,7 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
             // 아이템 이름
             Positioned(
-              top: isTablet ? 150.0 : 120.0,  // 태블릿: 150, 스마트폰: 120
+              top: isTablet ? 150.0 : itemHeight * 0.55, // 스마트폰에서는 비율로 조절
               left: 0,
               right: 0,
               child: Center(
@@ -312,6 +403,7 @@ class _ShopScreenState extends State<ShopScreen> {
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                     fontFamily: 'DungGeunMo',
+                    decoration: TextDecoration.none,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -327,7 +419,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 children: [
                   Image.asset(
                     'assets/images/Icon_Gold.png',
-                    width: isTablet ? 30.0 : 24.0,  // 20*1.5, 16*1.5
+                    width: isTablet ? 30.0 : 24.0,
                     height: isTablet ? 30.0 : 24.0,
                   ),
                   const SizedBox(width: 4),
@@ -338,6 +430,7 @@ class _ShopScreenState extends State<ShopScreen> {
                       fontWeight: FontWeight.bold,
                       color: Colors.black,
                       fontFamily: 'DungGeunMo',
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ],
@@ -373,6 +466,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   fontSize: 24,
                   fontFamily: 'DungGeunMo',
                   fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.none,
                 ),
               ),
             ],
@@ -420,6 +514,7 @@ class _ShopScreenState extends State<ShopScreen> {
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       ),
@@ -453,6 +548,7 @@ class _ShopScreenState extends State<ShopScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                         fontFamily: 'DungGeunMo',
+                        decoration: TextDecoration.none,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -479,6 +575,7 @@ class _ShopScreenState extends State<ShopScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.black,
                           fontFamily: 'DungGeunMo',
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ],
@@ -508,6 +605,7 @@ class _ShopScreenState extends State<ShopScreen> {
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                               fontFamily: 'DungGeunMo',
+                              decoration: TextDecoration.none,
                             ),
                           ),
                         ],
@@ -554,6 +652,7 @@ class _ShopScreenState extends State<ShopScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                         fontFamily: 'DungGeunMo',
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),
@@ -582,6 +681,7 @@ class _ShopScreenState extends State<ShopScreen> {
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                               fontFamily: 'DungGeunMo',
+                              decoration: TextDecoration.none,
                             ),
                           ),
                         ],
