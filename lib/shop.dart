@@ -280,56 +280,63 @@ class _ShopScreenState extends State<ShopScreen> {
                           ],
                         );
                       } else {
-                        // 스마트폰: 세로 배치로 변경
-                        return SingleChildScrollView(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(height: 20),
-                              _buildShopItem(
-                                'assets/images/StoreItemFrame.png',
-                                'assets/images/Leather_Armor.png',
-                                'Leather Armor',
-                                10,
-                                ShopItem(
-                                  itemId: 'leather_armor',
-                                  name: 'Leather Armor',
-                                  description: '가죽 갑옷',
-                                  price: 10,
-                                  itemType: 'ARMOR',
+                        // 스마트폰: 역 피라미드 모양 배치 (태블릿과 동일한 레이아웃)
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 첫 번째 줄: Leather Armor, Wooden Sword
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/Leather_Armor.png',
+                                  'Leather Armor',
+                                  10,
+                                  ShopItem(
+                                    itemId: 'leather_armor',
+                                    name: 'Leather Armor',
+                                    description: '가죽 갑옷',
+                                    price: 10,
+                                    itemType: 'ARMOR',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 20),
-                              _buildShopItem(
-                                'assets/images/StoreItemFrame.png',
-                                'assets/images/wooden_sword.png',
-                                'Wooden Sword',
-                                10,
-                                ShopItem(
-                                  itemId: 'wooden_sword',
-                                  name: 'Wooden Sword',
-                                  description: '나무 검',
-                                  price: 10,
-                                  itemType: 'WEAPON',
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/wooden_sword.png',
+                                  'Wooden Sword',
+                                  10,
+                                  ShopItem(
+                                    itemId: 'wooden_sword',
+                                    name: 'Wooden Sword',
+                                    description: '나무 검',
+                                    price: 10,
+                                    itemType: 'WEAPON',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 20),
-                              _buildShopItem(
-                                'assets/images/StoreItemFrame.png',
-                                'assets/images/MagicPotion.png',
-                                'Potion',
-                                40,
-                                ShopItem(
-                                  itemId: 'magic_potion',
-                                  name: 'Potion',
-                                  description: '마법 포션',
-                                  price: 40,
-                                  itemType: 'POTION',
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            // 두 번째 줄: Potion
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildShopItem(
+                                  'assets/images/StoreItemFrame.png',
+                                  'assets/images/MagicPotion.png',
+                                  'Potion',
+                                  40,
+                                  ShopItem(
+                                    itemId: 'magic_potion',
+                                    name: 'Potion',
+                                    description: '마법 포션',
+                                    price: 40,
+                                    itemType: 'POTION',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 20),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         );
                       }
                     },
@@ -356,11 +363,11 @@ class _ShopScreenState extends State<ShopScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     
-    final itemWidth = isTablet ? 240.0 : screenWidth * 0.4;
+    final itemWidth = isTablet ? 240.0 : screenWidth * 0.4; // 스마트폰 크기 원복
     final itemHeight = isTablet ? 270.0 : itemWidth * 1.125; // 비율 유지
-    final imageSize = isTablet ? 120.0 : itemWidth * 0.5;
-    final fontSize = isTablet ? 21.0 : 16.0;
-    final priceFontSize = isTablet ? 24.0 : 18.0;
+    final imageSize = isTablet ? 120.0 : itemWidth * 0.5; // 스마트폰 이미지 크기 원복
+    final fontSize = isTablet ? 21.0 : 16.0; // 스마트폰 텍스트 크기 원복
+    final priceFontSize = isTablet ? 24.0 : 18.0; // 스마트폰 가격 텍스트 크기 원복
     
     return GestureDetector(
       onTap: () => _showBuyDialog(shopItem),
@@ -378,7 +385,7 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
             // 아이템 이미지
             Positioned(
-              top: 15,
+              top: 15, // 원복
               left: 0,
               right: 0,
               child: Center(
@@ -411,7 +418,7 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
             // 가격 (골드 아이콘 + 가격)
             Positioned(
-              bottom: 15,
+              bottom: 15, // 원복
               left: 0,
               right: 0,
               child: Row(
@@ -419,10 +426,10 @@ class _ShopScreenState extends State<ShopScreen> {
                 children: [
                   Image.asset(
                     'assets/images/Icon_Gold.png',
-                    width: isTablet ? 30.0 : 24.0,
+                    width: isTablet ? 30.0 : 24.0, // 원복
                     height: isTablet ? 30.0 : 24.0,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 4), // 원복
                   Text(
                     price.toString(),
                     style: TextStyle(
