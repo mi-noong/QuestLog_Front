@@ -41,15 +41,15 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildTopInfoSection(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final bool isTablet = screenWidth > 600;
-    final double barGap = isTablet ? 12.0 : 10.0; // 텍스트와 바 이미지 사이 간격 증가
+    final isTablet = screenWidth > 600;
     
-    // 반응형 크기 설정
-    final double iconSize = isTablet ? 69.0 : 54.0; // 1.3배 줄임 (90/1.3, 70/1.3)
-    final double fontSize = isTablet ? 45.0 : 38.0; // HP/XP 텍스트 크기 증가
-    final double goldFontSize = isTablet ? 44.0 : 37.0;
-    final double barHeight = isTablet ? 80.0 : 55.0; // 바 높이 더 증가
-    final double sectionWidth = isTablet ? (screenWidth * 0.48) : 180.0; // 태블릿에서 더 넓게 확보 (가로 길이 증가)
+    // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
+    final double barGap = isTablet ? 12.0 : 8.0; // 텍스트와 바 이미지 사이 간격
+    final double iconSize = isTablet ? 69.0 : 45.0; // 스마트폰에서 아이콘 크기 감소
+    final double fontSize = isTablet ? 45.0 : 28.0; // HP/XP 텍스트 크기 (스마트폰에서 크기 감소)
+    final double goldFontSize = isTablet ? 44.0 : 28.0; // 골드 텍스트 크기
+    final double barHeight = isTablet ? 80.0 : 60.0; // 바 높이 (스마트폰에서 더 크게)
+    final double sectionWidth = isTablet ? screenWidth * 0.48 : screenWidth * 0.45; // 화면 너비 조절
     
     return Container(
       decoration: BoxDecoration(
@@ -82,12 +82,12 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
 
-                    SizedBox(width: isTablet ? 20.0 : 16.0),
+                    SizedBox(width: 20.0),
 
                     // HP/XP 바들 (크기 증가) - 화면 상단 중앙으로 이동
                     Expanded(
                       child: Padding(
-                        padding: EdgeInsets.only(left: isTablet ? 20.0 : 15.0), // 패딩 조정
+                        padding: EdgeInsets.only(left: isTablet ? 20.0 : 12.0), // 스마트폰에서 패딩 감소
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -105,16 +105,20 @@ class HomeScreen extends StatelessWidget {
                               ),
                               SizedBox(width: barGap),
                               Expanded(
-                                child: Image.asset(
-                                  'assets/images/Icon_HPBar_10.png',
-                                  height: barHeight,
-                                  fit: BoxFit.fitWidth,
+                                child: FractionallySizedBox(
+                                  widthFactor: 1.4, // 가로 길이 더 증가
+                                  alignment: Alignment.centerLeft,
+                                  child: Image.asset(
+                                    'assets/images/Icon_HPBar_10.png',
+                                    height: barHeight,
+                                    fit: BoxFit.fitWidth,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
 
-                          SizedBox(height: isTablet ? 15.0 : 12.0),
+                          SizedBox(height: isTablet ? 15.0 : 0.0), // 스마트폰에서 간격 완전 제거
 
                           // XP 바
                           Row(
@@ -130,10 +134,14 @@ class HomeScreen extends StatelessWidget {
                               ),
                               SizedBox(width: barGap),
                               Expanded(
-                                child: Image.asset(
-                                  'assets/images/Icon_XpBar_10.png',
-                                  height: barHeight,
-                                  fit: BoxFit.fitWidth,
+                                child: FractionallySizedBox(
+                                  widthFactor: 1.4, // 가로 길이 더 증가
+                                  alignment: Alignment.centerLeft,
+                                  child: Image.asset(
+                                    'assets/images/Icon_XpBar_10.png',
+                                    height: barHeight,
+                                    fit: BoxFit.fitWidth,
+                                  ),
                                 ),
                               ),
                             ],
@@ -145,7 +153,7 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
 
-                SizedBox(height: isTablet ? 25.0 : 20.0),
+                SizedBox(height: isTablet ? 25.0 : 15.0), // 스마트폰에서 간격 감소
 
                 // 골드
                 Row(
@@ -155,7 +163,7 @@ class HomeScreen extends StatelessWidget {
                       width: iconSize,
                       height: iconSize,
                     ),
-                    SizedBox(width: isTablet ? 12.0 : 8.0),
+                    SizedBox(width: isTablet ? 12.0 : 8.0), // 스마트폰에서 간격 감소
                     Text(
                       '2500',
                       style: TextStyle(
@@ -168,7 +176,7 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
 
-                SizedBox(height: isTablet ? 25.0 : 20.0),
+                SizedBox(height: isTablet ? 25.0 : 15.0), // 스마트폰에서 간격 감소
 
                 // 캘린더 아이콘
                 Image.asset(
@@ -187,13 +195,13 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 // HP/XP바 섹션 높이만큼 상단 간격 (골드와 같은 높이에 가방 배치)
-                SizedBox(height: barHeight * 2 + (isTablet ? 15.0 : 12.0) + (isTablet ? 25.0 : 20.0)),
+                SizedBox(height: barHeight * 2 + (isTablet ? 15.0 : 10.0) + (isTablet ? 25.0 : 15.0)),
                 Image.asset(
                   'assets/images/Icon_Backpack.png',
                   width: iconSize,
                   height: iconSize,
                 ),
-                SizedBox(height: isTablet ? 25.0 : 20.0), // 골드와 캘린더 사이 간격과 동일
+                SizedBox(height: isTablet ? 25.0 : 15.0), // 골드와 캘린더 사이 간격과 동일
                 GestureDetector(
                   onTap: () {
                     Navigator.push(
@@ -290,9 +298,9 @@ class _QuestMapSectionState extends State<_QuestMapSection> {
                     final screenHeight = MediaQuery.of(context).size.height;
                     final isTablet = screenWidth > 600;
                     
-                    // 화면 크기에 따른 지도맵 크기 조정
-                    final mapWidth = isTablet ? 600.0 : screenWidth * 0.9;
-                    final mapHeight = 700.0; // 높이 증가
+                    // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
+                    final mapWidth = isTablet ? 600.0 : screenWidth * 0.85; // 스마트폰에서 너비 감소
+                    final mapHeight = isTablet ? 700.0 : screenHeight * 0.45; // 스마트폰에서 높이 대폭 감소
                     
                     return Image.asset(
                       _isQuestMap ? 'assets/images/map_Quest.png' : 'assets/images/map.png',
@@ -303,7 +311,7 @@ class _QuestMapSectionState extends State<_QuestMapSection> {
                   },
                 ),
                 if (!_isQuestMap)
-                  const Positioned(
+                  Positioned(
                     top: 0,
                     bottom: 0,
                     child: Column(
@@ -313,7 +321,7 @@ class _QuestMapSectionState extends State<_QuestMapSection> {
                           'Please Enter',
                           style: TextStyle(
                             color: Colors.black,
-                            fontSize: 42,
+                            fontSize: MediaQuery.of(context).size.width > 600 ? 42 : 28, // 스마트폰에서 폰트 크기 감소
                             fontWeight: FontWeight.bold,
                             fontFamily: 'DungGeunMo',
                             decoration: TextDecoration.none,
@@ -323,7 +331,7 @@ class _QuestMapSectionState extends State<_QuestMapSection> {
                           'the quest',
                           style: TextStyle(
                             color: Colors.black,
-                            fontSize: 42,
+                            fontSize: MediaQuery.of(context).size.width > 600 ? 42 : 28, // 스마트폰에서 폰트 크기 감소
                             fontWeight: FontWeight.bold,
                             fontFamily: 'DungGeunMo',
                             decoration: TextDecoration.none,
