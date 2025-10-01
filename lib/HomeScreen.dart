@@ -46,7 +46,7 @@ class HomeScreen extends StatelessWidget {
     // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
     final double barGap = isTablet ? 12.0 : 8.0; // 텍스트와 바 이미지 사이 간격
     final double iconSize = isTablet ? 69.0 : 45.0; // 스마트폰에서 아이콘 크기 감소
-    final double fontSize = isTablet ? 45.0 : 28.0; // HP/XP 텍스트 크기 (스마트폰에서 크기 감소)
+    final double fontSize = isTablet ? 45.0 : 24.0; // HP/XP 텍스트 크기 (스마트폰에서 크기 감소)
     final double goldFontSize = isTablet ? 44.0 : 28.0; // 골드 텍스트 크기
     final double barHeight = isTablet ? 80.0 : 60.0; // 바 높이 (스마트폰에서 더 크게)
     final double sectionWidth = isTablet ? screenWidth * 0.48 : screenWidth * 0.45; // 화면 너비 조절
@@ -106,7 +106,7 @@ class HomeScreen extends StatelessWidget {
                               SizedBox(width: barGap),
                               Expanded(
                                 child: FractionallySizedBox(
-                                  widthFactor: 1.4, // 가로 길이 더 증가
+                                  widthFactor: 2.0, // 가로 길이 더욱 증가
                                   alignment: Alignment.centerLeft,
                                   child: Image.asset(
                                     'assets/images/Icon_HPBar_10.png',
@@ -118,7 +118,7 @@ class HomeScreen extends StatelessWidget {
                             ],
                           ),
 
-                          SizedBox(height: isTablet ? 15.0 : 0.0), // 스마트폰에서 간격 완전 제거
+                          SizedBox(height: isTablet ? 15.0 : 5.0), // 스마트폰에서 간격 더 좁히기
 
                           // XP 바
                           Row(
@@ -135,7 +135,7 @@ class HomeScreen extends StatelessWidget {
                               SizedBox(width: barGap),
                               Expanded(
                                 child: FractionallySizedBox(
-                                  widthFactor: 1.4, // 가로 길이 더 증가
+                                  widthFactor: 2.0, // 가로 길이 더욱 증가
                                   alignment: Alignment.centerLeft,
                                   child: Image.asset(
                                     'assets/images/Icon_XpBar_10.png',
