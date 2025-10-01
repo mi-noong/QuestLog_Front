@@ -281,10 +281,10 @@ class _StatusFrame extends StatelessWidget {
         // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
         final targetHeight = isTablet 
           ? (screen.height * 0.75 / 1.2).clamp(260.0, screen.height)
-          : screen.height * 0.6;
+          : screen.height * 0.58; // 스마트폰에서 높이 더 감소 (하단 여백 줄이기)
         final targetWidth = isTablet 
           ? (screen.width * 0.9 / 1.1).clamp(260.0, constraints.maxWidth)
-          : screen.width * 0.95;
+          : screen.width * 0.88; // 스마트폰에서 너비 감소
           
         return Align(
           alignment: Alignment.topCenter,
@@ -302,134 +302,257 @@ class _StatusFrame extends StatelessWidget {
               // 내부 콘텐츠는 패딩 + 컬럼으로 배치하여 오버플로 제거
               Padding(
                 padding: EdgeInsets.fromLTRB(
-                  isTablet ? 20.0 : 15.0, 
-                  isTablet ? 32.0 : 24.0, 
-                  isTablet ? 20.0 : 15.0, 
-                  isTablet ? 20.0 : 15.0
+                  isTablet ? 20.0 : 10.0, // 스마트폰에서 패딩 더 감소
+                  isTablet ? 32.0 : 14.0, // 스마트폰에서 상단 패딩 감소
+                  isTablet ? 20.0 : 10.0, // 스마트폰에서 패딩 더 감소
+                  isTablet ? 20.0 : 8.0   // 스마트폰에서 하단 패딩 대폭 감소
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 상단 가운데에 HP/XP 바
-                    Align(
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(
-                        width: targetWidth * 0.8,
-                        child: Column(
-                          children: [
-                            Row(
+                child: isTablet 
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 태블릿용 기존 레이아웃
+                        Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: targetWidth * 0.8,
+                            child: Column(
                               children: [
-                                Text(
-                                  'HP',
-                                  style: TextStyle(
-                                    fontFamily: 'DungGeunMo',
-                                    fontSize: isTablet ? 24.0 : 18.0,
-                                    color: Colors.black,
-                                    decoration: TextDecoration.none,
-                                  ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'HP',
+                                      style: TextStyle(
+                                        fontFamily: 'DungGeunMo',
+                                        fontSize: 24.0,
+                                        color: Colors.black,
+                                        decoration: TextDecoration.none,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: FractionallySizedBox(
+                                        widthFactor: 1/1.1,
+                                        alignment: Alignment.centerLeft,
+                                        child: Image.asset(_hpBarAsset(), fit: BoxFit.fill),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('${userInfo.hp}/${userInfo.maxHp}',
+                                        style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 24.0, decoration: TextDecoration.none)),
+                                    const SizedBox(width: 12),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: FractionallySizedBox(
-                                    widthFactor: 1/1.1,
-                                    alignment: Alignment.centerLeft,
-                                    child: Image.asset(_hpBarAsset(), fit: BoxFit.fill),
-                                  ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'XP',
+                                      style: TextStyle(
+                                        fontFamily: 'DungGeunMo',
+                                        fontSize: 24.0,
+                                        color: Colors.black,
+                                        decoration: TextDecoration.none,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: FractionallySizedBox(
+                                        widthFactor: 1/1.1,
+                                        alignment: Alignment.centerLeft,
+                                        child: Image.asset(_xpBarAsset(), fit: BoxFit.fill),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('${userInfo.exp}/${100 + (userInfo.level - 1) * 50}',
+                                        style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 24.0, decoration: TextDecoration.none)),
+                                    const SizedBox(width: 12),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Text('${userInfo.hp}/${userInfo.maxHp}',
-                                    style: TextStyle(fontFamily: 'DungGeunMo', fontSize: isTablet ? 24.0 : 18.0, decoration: TextDecoration.none)),
-                                const SizedBox(width: 12),
                               ],
                             ),
-                      const SizedBox(height: 20),
-                            Row(
-                              children: [
-                                Text(
-                                  'XP',
-                                  style: TextStyle(
-                                    fontFamily: 'DungGeunMo',
-                                    fontSize: isTablet ? 24.0 : 18.0,
-                                    color: Colors.black,
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: FractionallySizedBox(
-                                    widthFactor: 1/1.1,
-                                    alignment: Alignment.centerLeft,
-                                    child: Image.asset(_xpBarAsset(), fit: BoxFit.fill),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text('${userInfo.exp}/${100 + (userInfo.level - 1) * 50}',
-                                    style: TextStyle(fontFamily: 'DungGeunMo', fontSize: isTablet ? 24.0 : 18.0, decoration: TextDecoration.none)),
-                                const SizedBox(width: 12),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    // 골드 (조금 오른쪽으로 이동)
-                    Padding(
-                      padding: EdgeInsets.only(left: isTablet ? 12.0 : 8.0),
-                      child: Row(
-                        children: [
+                        const SizedBox(height: 32),
+                        Padding(
+                          padding: EdgeInsets.only(left: 12.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 40.0,
+                                height: 40.0,
+                                child: Image.asset('assets/images/Icon_Gold.png'),
+                              ),
+                              SizedBox(width: 6.0),
+                              Text('${userInfo.gold}',
+                                  style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 36.0, color: Colors.black, decoration: TextDecoration.none)),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 16.0),
+                        Padding(
+                          padding: EdgeInsets.only(left: 20.0),
+                          child: Text('Equipment',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              fontSize: 40.0,
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            )),
+                        ),
+                        SizedBox(height: 28.0),
                         SizedBox(
-                          width: isTablet ? 40.0 : 32.0,
-                          height: isTablet ? 40.0 : 32.0,
-                          child: Image.asset('assets/images/Icon_Gold.png'),
+                          height: 160.0,
+                          child: Center(
+                            child: _EquipmentRow(userInfo: userInfo),
+                          ),
                         ),
-                        SizedBox(width: isTablet ? 6.0 : 4.0),
-                        Text('${userInfo.gold}',
-                            style: TextStyle(fontFamily: 'DungGeunMo', fontSize: isTablet ? 36.0 : 28.0, color: Colors.black, decoration: TextDecoration.none)),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: isTablet ? 16.0 : 12.0),
-                    Padding(
-                      padding: EdgeInsets.only(left: isTablet ? 20.0 : 15.0),
-                      child: Text('Equipment',
-                        style: TextStyle(
-                          fontFamily: 'DungGeunMo',
-                          fontSize: isTablet ? 40.0 : 30.0,
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.none,
-                        )),
-                    ),
-                    SizedBox(height: isTablet ? 28.0 : 20.0),
-                    SizedBox(
-                      height: isTablet ? 160.0 : 120.0,
-                      child: Center(
-                        child: _EquipmentRow(userInfo: userInfo),
-                      ),
-                    ),
-                    SizedBox(height: isTablet ? 28.0 : 20.0),
-                    Padding(
-                      padding: EdgeInsets.only(left: isTablet ? 20.0 : 15.0),
-                      child: Text('Stats',
-                        style: TextStyle(
-                          fontFamily: 'DungGeunMo',
-                          fontSize: isTablet ? 40.0 : 30.0,
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.none,
-                        )),
-                    ),
-                    SizedBox(height: isTablet ? 24.0 : 16.0),
-                    Center(
-                      child: SizedBox(
-                        height: isTablet ? 180.0 : 140.0,
-                        child: FractionallySizedBox(
-                          widthFactor: 0.88, // 가로 길이 약간 더 확장
-                          child: _StatsPanel(userInfo: userInfo),
+                        SizedBox(height: 28.0),
+                        Padding(
+                          padding: EdgeInsets.only(left: 20.0),
+                          child: Text('Stats',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              fontSize: 40.0,
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            )),
                         ),
-                      ),
-                    ),
+                        SizedBox(height: 24.0),
+                        Center(
+                          child: SizedBox(
+                            height: 180.0,
+                            child: FractionallySizedBox(
+                              widthFactor: 0.88,
+                              child: _StatsPanel(userInfo: userInfo),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly, // 스마트폰에서 요소들을 균등하게 분산
+                      children: [
+                        // 스마트폰용 HP/XP 바
+                        Align(
+                          alignment: Alignment.center,
+                          child: SizedBox(
+                            width: targetWidth * 0.85,
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'HP',
+                                      style: TextStyle(
+                                        fontFamily: 'DungGeunMo',
+                                        fontSize: 16.0,
+                                        color: Colors.black,
+                                        decoration: TextDecoration.none,
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.0),
+                                    Expanded(
+                                      child: FractionallySizedBox(
+                                        widthFactor: 1/1.1,
+                                        alignment: Alignment.centerLeft,
+                                        child: Image.asset(_hpBarAsset(), fit: BoxFit.fill),
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.0),
+                                    Text('${userInfo.hp}/${userInfo.maxHp}',
+                                        style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 16.0, decoration: TextDecoration.none)),
+                                    SizedBox(width: 8.0),
+                                  ],
+                                ),
+                                SizedBox(height: 12.0),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'XP',
+                                      style: TextStyle(
+                                        fontFamily: 'DungGeunMo',
+                                        fontSize: 16.0,
+                                        color: Colors.black,
+                                        decoration: TextDecoration.none,
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.0),
+                                    Expanded(
+                                      child: FractionallySizedBox(
+                                        widthFactor: 1/1.1,
+                                        alignment: Alignment.centerLeft,
+                                        child: Image.asset(_xpBarAsset(), fit: BoxFit.fill),
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.0),
+                                    Text('${userInfo.exp}/${100 + (userInfo.level - 1) * 50}',
+                                        style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 16.0, decoration: TextDecoration.none)),
+                                    SizedBox(width: 8.0),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // 스마트폰용 골드
+                        Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 28.0,
+                                height: 28.0,
+                                child: Image.asset('assets/images/Icon_Gold.png'),
+                              ),
+                              SizedBox(width: 4.0),
+                              Text('${userInfo.gold}',
+                                  style: TextStyle(fontFamily: 'DungGeunMo', fontSize: 24.0, color: Colors.black, decoration: TextDecoration.none)),
+                            ],
+                          ),
+                        ),
+                        // 스마트폰용 Equipment
+                        Padding(
+                          padding: EdgeInsets.only(left: 15.0),
+                          child: Text('Equipment',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              fontSize: 28.0,
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            )),
+                        ),
+                        SizedBox(
+                          height: 80.0,
+                          child: Center(
+                            child: _EquipmentRow(userInfo: userInfo),
+                          ),
+                        ),
+                        // 스마트폰용 Stats
+                        Padding(
+                          padding: EdgeInsets.only(left: 15.0),
+                          child: Text('Stats',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              fontSize: 28.0,
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            )),
+                        ),
+                        Center(
+                          child: SizedBox(
+                            height: 80.0,
+                            child: FractionallySizedBox(
+                              widthFactor: 0.85,
+                              child: _StatsPanel(userInfo: userInfo),
+                            ),
+                          ),
+                        ),
                   ],
                 ),
               ),
@@ -469,8 +592,8 @@ class _EquipmentRow extends StatelessWidget {
         final isTablet = screenWidth > 600;
         
         return SizedBox(
-          width: isTablet ? 160.0 : 120.0,
-          height: isTablet ? 384.0 : 288.0,
+          width: isTablet ? 160.0 : 70.0, // 스마트폰에서 너비 더 감소
+          height: isTablet ? 384.0 : 150.0, // 스마트폰에서 높이 더 감소
           child: Stack(
             children: [
               Positioned.fill(
@@ -483,8 +606,8 @@ class _EquipmentRow extends StatelessWidget {
                 Center(
                   child: Image.asset(
                     assetPathOrNull,
-                    width: isTablet ? 80.0 : 60.0,
-                    height: isTablet ? 160.0 : 120.0,
+                    width: isTablet ? 80.0 : 35.0, // 스마트폰에서 아이콘 크기 더 감소
+                    height: isTablet ? 160.0 : 70.0, // 스마트폰에서 아이콘 크기 더 감소
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -530,15 +653,22 @@ class _EquipmentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _slot('갑옷', _armorAsset(userInfo.armor)),
-        const SizedBox(width: 16),
-        _slot('무기', _weaponAsset(userInfo.weapon)),
-        const SizedBox(width: 16),
-        _slot('펫', _petAsset(userInfo.pets)),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isTablet = screenWidth > 600;
+        
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _slot('갑옷', _armorAsset(userInfo.armor)),
+            SizedBox(width: isTablet ? 16.0 : 6.0), // 스마트폰에서 간격 더 감소
+            _slot('무기', _weaponAsset(userInfo.weapon)),
+            SizedBox(width: isTablet ? 16.0 : 6.0), // 스마트폰에서 간격 더 감소
+            _slot('펫', _petAsset(userInfo.pets)),
+          ],
+        );
+      },
     );
   }
 }
@@ -549,79 +679,87 @@ class _StatsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FractionallySizedBox(
-      widthFactor: 0.7, // 가로 살짝 확대
-      child: SizedBox(
-        height: 110, // 내부 높이 증가로 라벨/수치 간격 확보
-        child: Stack(
-      children: [
-        Positioned.fill(
-          child: Image.asset(
-            'assets/images/Quest_MemoInput.png',
-            fit: BoxFit.fill,
-          ),
-        ),
-        // 상단 라벨
-        const Positioned(
-          left: 60,
-          top: 10,
-          child: Text(
-            'Attack',
-            style: TextStyle(
-              fontFamily: 'DungGeunMo',
-              fontSize: 29,
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.none,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isTablet = screenWidth > 600;
+        
+        return FractionallySizedBox(
+          widthFactor: isTablet ? 0.7 : 0.9, // 스마트폰에서 너비 증가
+          child: SizedBox(
+            height: isTablet ? 110 : 60, // 스마트폰에서 높이 더 감소 (하단 여백 줄이기)
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/Quest_MemoInput.png',
+                    fit: BoxFit.fill,
+                  ),
+                ),
+                // 상단 라벨
+                Positioned(
+                  left: isTablet ? 60 : 30,
+                  top: isTablet ? 10 : 4,
+                  child: Text(
+                    'Attack',
+                    style: TextStyle(
+                      fontFamily: 'DungGeunMo',
+                      fontSize: isTablet ? 29 : 16,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: isTablet ? 60 : 30,
+                  top: isTablet ? 10 : 4,
+                  child: Text(
+                    'Defense',
+                    style: TextStyle(
+                      fontFamily: 'DungGeunMo',
+                      fontSize: isTablet ? 29 : 16,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                // 수치
+                Positioned(
+                  left: isTablet ? 70 : 40,
+                  top: isTablet ? 68 : 32,
+                  child: Text(
+                    '${userInfo.attack}',
+                    style: TextStyle(
+                      fontFamily: 'DungGeunMo',
+                      fontSize: isTablet ? 37 : 20,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: isTablet ? 70 : 40,
+                  top: isTablet ? 68 : 32,
+                  child: Text(
+                    '${userInfo.defense}',
+                    style: TextStyle(
+                      fontFamily: 'DungGeunMo',
+                      fontSize: isTablet ? 37 : 20,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const Positioned(
-          right: 60,
-          top: 10,
-          child: Text(
-            'Defense',
-            style: TextStyle(
-              fontFamily: 'DungGeunMo',
-              fontSize: 29,
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ),
-        // 수치
-        Positioned(
-          left: 70,
-          top: 68,
-          child: Text(
-            '${userInfo.attack}',
-            style: const TextStyle(
-              fontFamily: 'DungGeunMo',
-              fontSize: 37,
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ),
-        Positioned(
-          right: 70,
-          top: 68,
-          child: Text(
-            '${userInfo.defense}',
-            style: const TextStyle(
-              fontFamily: 'DungGeunMo',
-              fontSize: 37,
-              color: Colors.blue,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ),
-        ],
-      ),
-    ));
+        );
+      },
+    );
   }
 }
 
