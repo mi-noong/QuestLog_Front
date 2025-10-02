@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'SettingScreen.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'dart:async';
@@ -138,98 +139,8 @@ class _QuestScreenState extends State<QuestScreen> {
         successCount++;
       }
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$successCount개의 퀘스트 알림이 설정되었습니다!\n앱을 종료해도 알림이 작동합니다.'),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-    
-    // 즉시 테스트 알림도 발송
-    await _sendTestNotification();
-    
-    // 3초 후 추가 테스트 알림 발송
-    Timer(const Duration(seconds: 3), () async {
-      await _sendDelayedTestNotification();
-    });
   }
 
-  Future<void> _sendTestNotification() async {
-    try {
-      FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-      
-      // 알림 채널 생성
-    AndroidNotificationChannel channel = AndroidNotificationChannel(
-        'questlog_test',
-        'QuestLog Test',
-        description: 'Test notifications',
-      importance: Importance.max,
-    );
-
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-        _localNotification.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(channel);
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'questlog_test',
-        'QuestLog Test',
-        channelDescription: 'Test notifications',
-      importance: Importance.max,
-      priority: Priority.max,
-      enableVibration: true,
-      playSound: true,
-      showWhen: true,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.alarm,
-      visibility: NotificationVisibility.public,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-      await _localNotification.show(
-        9999,
-        '알림 설정 완료!',
-        '모든 퀘스트 알림이 설정되었습니다. 설정된 시간에 알림이 발송됩니다.',
-        details,
-      );
-      
-      print('✅ 테스트 알림 발송 성공');
-    } catch (e) {
-      print('❌ 테스트 알림 실패: $e');
-    }
-  }
-
-  Future<void> _sendDelayedTestNotification() async {
-    try {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'questlog_test',
-        'QuestLog Test',
-        channelDescription: 'Test notifications',
-      importance: Importance.max,
-      priority: Priority.max,
-        enableVibration: true,
-        playSound: true,
-        showWhen: true,
-        fullScreenIntent: true,
-        category: AndroidNotificationCategory.alarm,
-        visibility: NotificationVisibility.public,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-      await _localNotification.show(
-        9998,
-        '알림 시스템 테스트',
-        '3초 후 알림이 정상적으로 발송되었습니다! 스케줄된 알림도 정상 작동할 것입니다.',
-        details,
-      );
-      
-      print('✅ 지연 테스트 알림 발송 성공');
-    } catch (e) {
-      print('❌ 지연 테스트 알림 실패: $e');
-    }
-  }
 
   Future<void> _scheduleCardNotification(QuestData data, int cardIndex) async {
     // 백그라운드 서비스 호출
@@ -621,6 +532,7 @@ class _QuestScreenState extends State<QuestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
@@ -664,7 +576,7 @@ class _QuestScreenState extends State<QuestScreen> {
 
   Widget _buildTopTextSection() {
     return Container(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(10.0),
       child: Column(
         children: [
           const Center(
@@ -711,22 +623,28 @@ class _QuestScreenState extends State<QuestScreen> {
 
   Widget _buildFixedButtons() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // OK 버튼 (첫 번째 카드에만 표시)
           if (_currentIndex == 0) ...[
             GestureDetector(
-              onTap: () {
-                _scheduleNotifications();
+              onTap: () async {
+                // 알림 설정 먼저 실행
+                await _scheduleNotifications();
+                // 그 다음 SettingScreen으로 이동
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingScreen()),
+                );
               },
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   Image.asset(
                     'assets/images/MainButton.png',
-                    width: 200,
+                    width: 150,
                     height: 70,
                   ),
                   const Text(
@@ -740,7 +658,7 @@ class _QuestScreenState extends State<QuestScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 20),
+            const SizedBox(width: 10),
           ],
 
           
@@ -820,6 +738,9 @@ class _QuestCardState extends State<QuestCard> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _memoController = TextEditingController();
   String _selectedCategory = 'category';
+  
+  // Quest_Background.png 위치 설정 변수
+  static const double questBackgroundTop = -0; // Quest_Background.png의 top 위치
 
   @override
   void initState() {
@@ -898,27 +819,32 @@ class _QuestCardState extends State<QuestCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
           // Quest_Background와 오버레이 요소들
           SizedBox(
-            width: 850,
-            height: 550,
+            width: 650,
+            height: 460,
             child: Stack(
               alignment: Alignment.topCenter,
               children: [
-                Image.asset(
-                  'assets/images/Quest_Background.png',
-                  width: 850,
-                  height: 550,
-                  fit: BoxFit.contain,
+                Positioned(
+                  top: questBackgroundTop,
+                  child: Image.asset(
+                    'assets/images/Quest_Background.png',
+                    width: 650,
+                    height: 460,
+                    fit: BoxFit.contain,
+                  ),
                 ),
 
                 // 상단 Quest_Input (오버레이 텍스트 입력)
                 Positioned(
-                  top: 70,
+                  top: 50,
                   child: SizedBox(
                     width: 300,
                     height: 100,
@@ -927,7 +853,7 @@ class _QuestCardState extends State<QuestCard> {
                         Image.asset(
                           'assets/images/Quest_Input.png',
                           width: 300,
-                          height: 100,
+                          height: 90,
                           fit: BoxFit.contain,
                           alignment: Alignment.center,
                           filterQuality: FilterQuality.high,
@@ -958,8 +884,8 @@ class _QuestCardState extends State<QuestCard> {
 
                 // Memo 라벨
                 const Positioned(
-                  top: 175,
-                  left: 65,
+                  top: 135,
+                  left: 60,
                   child: Text(
                     'Memo',
                     style: TextStyle(
@@ -972,10 +898,10 @@ class _QuestCardState extends State<QuestCard> {
 
                 // Memo 입력 영역
                 Positioned(
-                  top: 210,
-                  left: 65,
+                  top: 165,
+                  left: 60,
                   child: SizedBox(
-                    width: 240,
+                    width: 200,
                     height: 90,
                     child: Stack(
                       children: [
@@ -1012,9 +938,9 @@ class _QuestCardState extends State<QuestCard> {
 
                 // Category 드롭다운
                 Positioned(
-                  top: 310,
+                  top: 260,
                   child: _CategoryDropdown(
-                    width: 240,
+                    width: 200,
                     selectedCategory: _selectedCategory,
                     onOpenChanged: (open) {
                       setState(() {
@@ -1032,8 +958,8 @@ class _QuestCardState extends State<QuestCard> {
 
                 // Time 라벨
                 Positioned(
-                  top: 370,
-                  left: 65,
+                  top: 315,
+                  left: 60,
                   child: Visibility(
                     visible: !_isCategoryOpen,
                     child: const Text(
@@ -1049,8 +975,8 @@ class _QuestCardState extends State<QuestCard> {
 
                 // Time 입력 영역
                 Positioned(
-                  top: 405,
-                  left: 65,
+                  top: 345,
+                  left: 60,
                   child: Visibility(
                     visible: !_isCategoryOpen,
                     child: GestureDetector(
@@ -1060,7 +986,7 @@ class _QuestCardState extends State<QuestCard> {
                         children: [
                           Image.asset(
                             'assets/images/Quest_TimeInput.png',
-                            width: 100,
+                            width: 80,
                             fit: BoxFit.contain,
                           ),
                           Text(
@@ -1077,8 +1003,8 @@ class _QuestCardState extends State<QuestCard> {
                   ),
                 ),
                 Positioned(
-                  top: 405,
-                  left: 180,
+                  top: 345,
+                  left: 155,
                   child: Visibility(
                     visible: !_isCategoryOpen,
                     child: const Text(
@@ -1092,8 +1018,8 @@ class _QuestCardState extends State<QuestCard> {
                   ),
                 ),
                 Positioned(
-                  top: 405,
-                  left: 205,
+                  top: 345,
+                  left: 180,
                   child: Visibility(
                     visible: !_isCategoryOpen,
                     child: GestureDetector(
@@ -1103,7 +1029,7 @@ class _QuestCardState extends State<QuestCard> {
                         children: [
                           Image.asset(
                             'assets/images/Quest_TimeInput.png',
-                            width: 100,
+                            width: 80,
                             fit: BoxFit.contain,
                           ),
                           Text(
@@ -1125,6 +1051,7 @@ class _QuestCardState extends State<QuestCard> {
 
         ],
       ),
+    )
     );
   }
 
@@ -1262,163 +1189,6 @@ class _QuestCardState extends State<QuestCard> {
     }
   }
 
-  Future<void> _testNotificationNow() async {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    // 제목 텍스트 확인
-    String title = _titleController.text.trim();
-    print('테스트 알림 - 제목 텍스트: "$title"');
-    
-    // 먼저 즉시 알림 테스트
-    await _testImmediateNotification();
-    
-    // 알림 채널 재생성
-    AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      description: 'Notifications for quest start and end times',
-      importance: Importance.max,
-    );
-
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-        _localNotification.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(channel);
-    
-    // 3초 후 알림 테스트 (더 짧은 시간)
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    final tz.TZDateTime scheduledDate = now.add(const Duration(seconds: 3));
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      channelDescription: 'Notifications for quest start and end times',
-      importance: Importance.max,
-      priority: Priority.max,
-      enableVibration: true,
-      playSound: true,
-      showWhen: true,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.alarm,
-      visibility: NotificationVisibility.public,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-    try {
-      // 권한 재확인
-      if (androidPlugin != null) {
-        final bool? canSchedule = await androidPlugin.canScheduleExactNotifications();
-        print('정확한 알림 스케줄링 가능: $canSchedule');
-        
-        final bool? notificationsEnabled = await androidPlugin.areNotificationsEnabled();
-        print('알림 권한 상태: $notificationsEnabled');
-      }
-      
-      await _localNotification.zonedSchedule(
-        999,
-        '3초 후 테스트 알림',
-        '3초 후 테스트 알림입니다!',
-        scheduledDate,
-        details,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        androidAllowWhileIdle: true,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'test_3sec',
-      );
-      
-      // 예약 확인
-      final List<PendingNotificationRequest> pending = await _localNotification.pendingNotificationRequests();
-      print('예약된 알림 개수: ${pending.length}');
-      for (var notif in pending) {
-        print('예약된 알림: ID=${notif.id}, 제목=${notif.title}');
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('즉시 알림과 3초 후 알림이 예약되었습니다!\nTimer 대안도 시도해보세요.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-      
-      // Timer를 사용한 대안 테스트
-      Timer(const Duration(seconds: 3), () async {
-        await _testTimerNotification();
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('테스트 알림 실패: $e')),
-      );
-    }
-  }
-
-  Future<void> _testTimerNotification() async {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      channelDescription: 'Notifications for quest start and end times',
-      importance: Importance.max,
-      priority: Priority.max,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-    try {
-      await _localNotification.show(
-        997,
-        'Timer 테스트 알림',
-        'Timer를 사용한 3초 후 알림입니다!',
-        details,
-      );
-      print('✅ Timer 알림 발송 성공');
-    } catch (e) {
-      print('❌ Timer 알림 실패: $e');
-    }
-  }
-
-  Future<void> _testImmediateNotification() async {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    // 제목 텍스트 확인
-    String title = _titleController.text.trim();
-    String notificationTitle = title.isNotEmpty 
-        ? '${title} 테스트 알림'
-        : '즉시 테스트 알림';
-    String notificationMessage = title.isNotEmpty 
-        ? '${title} 알림 시스템이 작동합니다!'
-        : '알림 시스템이 작동합니다!';
-    
-    // 알림 채널 재생성
-    AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      description: 'Notifications for quest start and end times',
-      importance: Importance.max,
-    );
-
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-        _localNotification.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(channel);
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      channelDescription: 'Notifications for quest start and end times',
-      importance: Importance.max,
-      priority: Priority.max,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-    try {
-      await _localNotification.show(
-        998,
-        notificationTitle,
-        notificationMessage,
-        details,
-      );
-    } catch (e) {
-      print('즉시 알림 실패: $e');
-    }
-  }
 }
 
 class _CategoryDropdown extends StatefulWidget {
