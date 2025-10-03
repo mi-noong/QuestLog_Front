@@ -1,10 +1,10 @@
 # QuestLog_Front
-WelcomScreen -> QuestScreen </br>
+WelcomScreen -> SettingScreen </br>
 # Design
 assets/images -> 이미지 파일 업로드
 </br>
 # Create
-QuestScreen.dart, NotificationService.java</br>
-assets/images -> Mypage_Item.png, MainButtonSquare.png 추가
+SettingScreen.dart</br>
+lib/models -> inventory_item.dart, user_game_info.dart
+lib/models -> game_service.dart
 # Update
-main.dart, MainActivity.kt, AndroidManifest.xml, pubspec.yaml
