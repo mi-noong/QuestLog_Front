@@ -7,7 +7,7 @@ final baseUrl = 'http://192.168.219.110:8083';
 
 // 사용자 게임 정보 모델
 class UserGameInfo {
-  final int userId;
+  final String userId;
   final String username;
   final int hp;
   final int maxHp;
@@ -63,7 +63,7 @@ class UserGameInfo {
 }
 
 // API 호출 함수
-Future<UserGameInfo?> fetchUserGameInfo(int userId) async {
+Future<UserGameInfo?> fetchUserGameInfo(String userId) async {
   try {
     final response = await http.get(
       Uri.parse('$baseUrl/api/game/user/$userId'),
@@ -109,7 +109,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
   Future<void> _loadUserInfo() async {
     // 실제 사용자 ID를 사용하여 백엔드에서 데이터 가져오기
     // TODO: 실제 로그인된 사용자 ID로 변경 필요
-    const userId = 1; // 임시로 사용자 ID 1 사용
+    const userId = "1"; // 임시로 사용자 ID "1" 사용
     
     final fetchedUserInfo = await fetchUserGameInfo(userId);
     
