@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'PasswordSuccessScreen.dart';
+import 'config/api_config.dart';
 
 class PasswordScreen extends StatefulWidget {
   const PasswordScreen({super.key});
@@ -33,7 +34,6 @@ class _PasswordScreenState extends State<PasswordScreen> {
       _errorMessage = null;
     });
 
-    final baseUrl = 'http://192.168.219.110:8083';
     try {
       final requestBody = {
         'username': _nameController.text.trim(),
@@ -42,10 +42,10 @@ class _PasswordScreenState extends State<PasswordScreen> {
       };
       
       print('비밀번호 찾기 요청 데이터: $requestBody');
-      print('요청 URL: $baseUrl/api/auth/find-password');
+      print('요청 URL: ${ApiConfig.findPasswordEndpoint}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/find-password'),
+        Uri.parse(ApiConfig.findPasswordEndpoint),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -162,13 +162,12 @@ class _PasswordScreenState extends State<PasswordScreen> {
               ),
               const SizedBox(height: 8),
               Container(
-                height: 70,
+                height: 60,
                 decoration: BoxDecoration(
                   image: const DecorationImage(
                     image: AssetImage('assets/images/InputBar.png'),
                     fit: BoxFit.cover,
                   ),
-                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: TextField(
                   controller: _nameController,
@@ -202,13 +201,12 @@ class _PasswordScreenState extends State<PasswordScreen> {
               ),
               const SizedBox(height: 8),
               Container(
-                height: 70,
+                height: 60,
                 decoration: BoxDecoration(
                   image: const DecorationImage(
                     image: AssetImage('assets/images/InputBar.png'),
                     fit: BoxFit.cover,
                   ),
-                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: TextField(
                   controller: _emailController,
@@ -242,13 +240,12 @@ class _PasswordScreenState extends State<PasswordScreen> {
               ),
               const SizedBox(height: 8),
               Container(
-                height: 70,
+                height: 60,
                 decoration: BoxDecoration(
                   image: const DecorationImage(
                     image: AssetImage('assets/images/InputBar.png'),
                     fit: BoxFit.cover,
                   ),
-                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: TextField(
                   controller: _idController,
