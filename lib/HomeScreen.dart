@@ -2,12 +2,138 @@ import 'package:flutter/material.dart';
 import 'QuestScreen.dart';
 import 'shop.dart';
 import 'MyPageScreen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'config/api_config.dart';
+import 'models/user_game_info.dart' as models;
+import 'services/game_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  models.UserGameInfo? userGameInfo;
+  bool isLoadingUser = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 로그인 후 하루 리셋 체크
+    _checkDailyReset();
+    // 사용자 게임 정보 로드
+    _loadUserGameInfo();
+  }
+
+  // 하루 리셋 체크 함수
+  Future<void> _checkDailyReset() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDbId = prefs.getInt('userDbId');
+      
+      if (userDbId == null) {
+        print('⚠️ 로그인한 사용자 DB ID가 없습니다. 하루 리셋 체크를 건너뜁니다.');
+        return;
+      }
+
+      print('📅 하루 리셋 체크 시작: userDbId=$userDbId');
+      
+      final response = await http.post(
+        Uri.parse(ApiConfig.dailyResetEndpoint(userDbId)),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('📡 하루 리셋 응답 상태: ${response.statusCode}');
+      print('📡 하루 리셋 응답 내용: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['success'] == true) {
+          print('✅ 하루 리셋 체크 완료');
+          // 하루가 바뀌었으면 보너스 지급 (백엔드에서 처리)
+        } else {
+          print('⚠️ 하루 리셋 체크 실패: ${responseData['message']}');
+        }
+      } else {
+        print('❌ 하루 리셋 체크 실패: HTTP ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('❌ 하루 리셋 체크 중 오류: $e');
+      // 오류가 발생해도 앱은 정상 작동해야 하므로 조용히 실패 처리
+    }
+  }
+
+  Future<void> _loadUserGameInfo() async {
+    try {
+      setState(() {
+        isLoadingUser = true;
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final userDbId = prefs.getInt('userDbId');
+      if (userDbId == null) {
+        print('⚠️ 로그인한 사용자 DB ID가 없습니다. 사용자 정보 로드를 건너뜁니다.');
+        setState(() {
+          isLoadingUser = false;
+        });
+        return;
+      }
+
+      final info = await GameService.getUserGameInfo(userDbId);
+      if (!mounted) return;
+      setState(() {
+        userGameInfo = info;
+        isLoadingUser = false;
+      });
+    } catch (e) {
+      print('❌ 사용자 정보 로드 실패(Home): $e');
+      if (!mounted) return;
+      setState(() {
+        isLoadingUser = false;
+      });
+    }
+  }
+
+  // 체력 바 이미지 선택 함수 (SettingScreen과 동일 로직)
+  String getHpBarImage(int hp) {
+    if (hp < 10) return 'assets/images/Icon_HpXp_EmptyBar.png';
+    if (hp < 20) return 'assets/images/Icon_HpBar_1.png';
+    if (hp < 30) return 'assets/images/Icon_HpBar_2.png';
+    if (hp < 40) return 'assets/images/Icon_HpBar_3.png';
+    if (hp < 50) return 'assets/images/Icon_HpBar_4.png';
+    if (hp < 60) return 'assets/images/Icon_HpBar_5.png';
+    if (hp < 70) return 'assets/images/Icon_HpBar_6.png';
+    if (hp < 80) return 'assets/images/Icon_HpBar_7.png';
+    if (hp < 90) return 'assets/images/Icon_HpBar_8.png';
+    if (hp < 100) return 'assets/images/Icon_HpBar_9.png';
+    return 'assets/images/Icon_HpBar_10.png';
+  }
+
+  // 경험치 바 이미지 선택 함수 (SettingScreen과 동일 로직)
+  String getExpBarImage(int level, int exp) {
+    int maxExp = 100 + (level - 1) * 50;
+    double expPercentage = maxExp == 0 ? 0 : (exp / maxExp) * 100;
+    if (expPercentage < 10) return 'assets/images/Icon_HpXp_EmptyBar.png';
+    if (expPercentage < 20) return 'assets/images/Icon_XpBar_1.png';
+    if (expPercentage < 30) return 'assets/images/Icon_XpBar_2.png';
+    if (expPercentage < 40) return 'assets/images/Icon_XpBar_3.png';
+    if (expPercentage < 50) return 'assets/images/Icon_XpBar_4.png';
+    if (expPercentage < 60) return 'assets/images/Icon_XpBar_5.png';
+    if (expPercentage < 70) return 'assets/images/Icon_XpBar_6.png';
+    if (expPercentage < 80) return 'assets/images/Icon_XpBar_7.png';
+    if (expPercentage < 90) return 'assets/images/Icon_XpBar_8.png';
+    if (expPercentage < 100) return 'assets/images/Icon_XpBar_9.png';
+    return 'assets/images/Icon_XpBar_10.png';
+  }
+
   // 아이콘 위치 설정 변수들
-  static const double backpackRightPosition = 160.0; // 가방 아이콘 오른쪽 여백
+  static const double backpackRightPosition = 170.0; // 가방 아이콘 오른쪽 여백
   static const double shopRightPosition = 210.0; // 상점 아이콘 오른쪽 여백
 
   @override
@@ -70,7 +196,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(width: 40),
+                  const SizedBox(width: 10),
 
                   // HP/XP 바들
                   Column(
@@ -88,7 +214,7 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ),
                           Image.asset(
-                            'assets/images/Icon_HpBar_10.png',
+                            getHpBarImage(userGameInfo?.hp ?? 100),
                             width: 190,
                             height: 23,
                           ),
@@ -109,7 +235,7 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ),
                           Image.asset(
-                            'assets/images/Icon_XpBar_10.png',
+                            getExpBarImage(userGameInfo?.level ?? 1, userGameInfo?.exp ?? 0),
                             width: 190,
                             height: 23,
                           ),
@@ -128,9 +254,9 @@ class HomeScreen extends StatelessWidget {
                     width: 55,
                     height: 55,
                   ),
-                  const Text(
-                    '2500',
-                    style: TextStyle(
+                  Text(
+                    '${userGameInfo?.gold ?? 0}',
+                    style: const TextStyle(
                       color: Colors.black,
                       fontSize: 25,
                       fontWeight: FontWeight.bold,
@@ -188,8 +314,8 @@ class HomeScreen extends StatelessWidget {
               // 맵 이미지 (여백 최소화)
               Image.asset(
                 'assets/images/map.png',
-                width: 440,
-                height: 410,
+                width: 380,
+                height: 390,
                 fit: BoxFit.contain,
               ),
 
