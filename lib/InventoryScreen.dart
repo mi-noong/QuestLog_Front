@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'HomeScreen.dart';
-import 'MyPageScreen.dart';
-import 'shop.dart';
-
-final baseUrl = 'http://192.168.219.110:8083';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'config/api_config.dart';
+import 'models/user_game_info.dart';
 
 // 인벤토리 아이템 모델
 class InventoryItem {
@@ -28,7 +26,7 @@ class InventoryItem {
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
     // 백엔드 ShopItem 엔티티 구조 지원: type 또는 itemType 필드 처리
     String itemType = json['itemType'] ?? json['type'] ?? '';
-    
+
     // stats 처리: 백엔드에서 statType과 statValue로 분리되어 있으면 stats Map으로 변환
     Map<String, dynamic>? stats = json['stats'];
     if (stats == null && json['statType'] != null && json['statValue'] != null) {
@@ -36,7 +34,7 @@ class InventoryItem {
         json['statType']: json['statValue'],
       };
     }
-    
+
     return InventoryItem(
       itemId: json['itemId'] ?? '',
       name: json['name'] ?? '',
@@ -48,87 +46,59 @@ class InventoryItem {
   }
 }
 
-// 사용자 인벤토리 조회 API (테스트용 모의 데이터)
-Future<Map<String, dynamic>?> fetchUserInventory(String userId) async {
+// 사용자 인벤토리 조회 API
+Future<Map<String, dynamic>?> fetchUserInventory(int userId) async {
   try {
-    print('사용자 인벤토리 정보 조회 시작: userId=$userId (모의 데이터)');
+    print('사용자 인벤토리 정보 조회 시작: userId=$userId');
     
-    // 네트워크 지연 시뮬레이션
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    // 테스트용 모의 데이터
-    final mockData = {
-      'currentHP': 85,
-      'maxHP': 100,
-      'currentXP': 45,
-      'maxXP': 100,
-      'gold': 150,
-      'gender': 'male',
-      'atk': 25,
-      'def': 15,
-      'inventory': {
-        'armor': {
-          'id': 'leather_armor',
-          'name': 'Leather Armor',
-          'description': '가죽 갑옷',
-          'stats': {
-            'defense': 10,
-            'level': 1,
-          }
-        },
-        'weapon': {
-          'id': 'wooden_sword',
-          'name': 'Wooden Sword',
-          'description': '나무 검',
-          'stats': {
-            'attack': 15,
-            'level': 1,
-          }
-        },
-        'pet': {
-          'id': 'cat',
-          'name': 'Cat',
-          'description': '고양이 펫',
-        },
-        'items': [
-          {
-            'itemId': 'silver_armor',
-            'name': 'Silver Armor',
-            'description': '은 갑옷',
-            'itemType': 'ARMOR',
-            'quantity': 1,
-            'stats': {
-              'defense': 15,
-              'level': 2,
-            }
-          },
-          {
-            'itemId': 'gold_sword',
-            'name': 'Gold Sword',
-            'description': '금 검',
-            'itemType': 'WEAPON',
-            'quantity': 1,
-            'stats': {
-              'attack': 25,
-              'level': 3,
-            }
-          },
-          {
-            'itemId': 'magic_potion',
-            'name': 'Magic Potion',
-            'description': '마법 포션',
-            'itemType': 'POTION',
-            'quantity': 5,
-            'stats': {
-              'heal': 50,
-            }
-          }
-        ]
+    final response = await http.get(
+      Uri.parse(ApiConfig.userGameInfo(userId)),
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('요청 시간이 초과되었습니다.');
+      },
+    );
+
+    print('API 응답 상태: ${response.statusCode}');
+    print('API 응답 본문: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      print('파싱된 데이터: $data');
+      
+      if (data['success'] == true) {
+        // UserGameInfo 모델로 파싱
+        final userGameInfo = UserGameInfo.fromJson(data);
+        
+        // InventoryScreen이 기대하는 형태로 변환
+        final inventory = userGameInfo.inventory.isNotEmpty 
+            ? userGameInfo.inventory[0] as Map<String, dynamic>?
+            : null;
+        
+        // maxHP는 보통 레벨 * 100 또는 고정값으로 계산
+        final maxHP = userGameInfo.level * 100;
+        // maxXP는 보통 레벨 * 100 또는 고정값으로 계산
+        final maxXP = userGameInfo.level * 100;
+        
+        final result = {
+          'currentHP': userGameInfo.hp,
+          'maxHP': maxHP,
+          'currentXP': userGameInfo.exp,
+          'maxXP': maxXP,
+          'gold': userGameInfo.gold,
+          'gender': 'male', // 기본값 (API 응답에 없으면 기본값 사용)
+          'atk': userGameInfo.atk,
+          'def': userGameInfo.def,
+          'inventory': inventory ?? {},
+        };
+        
+        print('변환된 인벤토리 데이터: $result');
+        return result;
       }
-    };
-    
-    print('모의 인벤토리 데이터 반환: $mockData');
-    return mockData;
+    }
+    return null;
   } catch (e) {
     print('사용자 인벤토리 조회 오류: $e');
     return null;
@@ -143,19 +113,19 @@ String getItemImagePath(String itemId) {
     'silver_armor': 'assets/images/SilverArmor.png',
     'gold_armor': 'assets/images/GoldArmor.png',
   };
-  
+
   // 무기 이미지
   final weaponImages = {
     'wooden_sword': 'assets/images/wooden_sword.png',
     'silver_sword': 'assets/images/silver_sword.png',
     'gold_sword': 'assets/images/golden_sword.png',
   };
-  
+
   // 포션 이미지
   final potionImages = {
     'magic_potion': 'assets/images/MagicPotion.png',
   };
-  
+
   if (armorImages.containsKey(itemId)) {
     return armorImages[itemId]!;
   } else if (weaponImages.containsKey(itemId)) {
@@ -163,7 +133,7 @@ String getItemImagePath(String itemId) {
   } else if (potionImages.containsKey(itemId)) {
     return potionImages[itemId]!;
   }
-  
+
   // 기본값
   return 'assets/images/Leather_Armor.png';
 }
@@ -176,23 +146,28 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
-  String? currentUserId;
+  int? currentUserDbId;
   bool isLoading = false;
   Map<String, dynamic>? userInventory;
   List<InventoryItem> inventoryItems = [];
-  
+
   // 사용자 정보
   int currentHP = 85;
   int maxHP = 100;
   int currentXP = 45;
   int maxXP = 100;
-  int gold = 150;
-  String gender = 'male'; // 'male' or 'female'
+  int gold = 0;
+  String gender = 'male';
   String? armorId;
   String? weaponId;
   String? petId;
   int atk = 0; // 공격력
   int def = 0; // 방어력
+
+  // 3x3 그리드용 아이템 목록 (사용자가 소유한 모든 아이템)
+  List<InventoryItem> ownedArmors = [];
+  List<InventoryItem> ownedWeapons = [];
+  List<InventoryItem> ownedPets = [];
 
   @override
   void initState() {
@@ -201,24 +176,43 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _loadCurrentUser() async {
-    // TODO: 실제 로그인된 사용자 ID로 변경 필요
-    // 현재는 임시로 사용자 ID "1" 사용
-    setState(() {
-      currentUserId = "1";
-    });
-    await _loadUserInventory();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDbId = prefs.getInt('userDbId');
+      
+      if (userDbId == null) {
+        print('⚠️ 로그인한 사용자 DB ID가 없습니다.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('로그인이 필요합니다.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      print('✅ 로그인한 사용자 DB ID: $userDbId');
+      setState(() {
+        currentUserDbId = userDbId;
+      });
+      await _loadUserInventory();
+    } catch (e) {
+      print('❌ 사용자 ID 가져오기 실패: $e');
+    }
   }
 
   Future<void> _loadUserInventory() async {
-    if (currentUserId == null) return;
+    if (currentUserDbId == null) return;
 
     setState(() {
       isLoading = true;
     });
 
     try {
-      final inventory = await fetchUserInventory(currentUserId!);
-      if (inventory != null) {
+      final inventory = await fetchUserInventory(currentUserDbId!);
+      if (inventory != null && mounted) {
         setState(() {
           userInventory = inventory;
           _processInventoryItems();
@@ -227,9 +221,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
     } catch (e) {
       print('사용자 인벤토리 로드 오류: $e');
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -251,88 +247,322 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     final inventory = userInventory!['inventory'];
     inventoryItems.clear();
+    ownedArmors.clear();
+    ownedWeapons.clear();
+    ownedPets.clear();
 
-    // 장착된 갑옷 ID 확인 (백엔드 구조에 따라 두 가지 형식 지원)
-    // 형식 1: inventory['armor']['id'] 또는 형식 2: inventory['armor_id']
+    // 장착된 갑옷 ID 확인 (백엔드 구조에 따라 여러 형식 지원)
+    // 형식 1: equippedArmor (새로운 백엔드 구조)
+    // 형식 2: armor (구형식)
+    // 형식 3: armor_id (ID만)
     String? equippedArmorId;
-    if (inventory?['armor'] != null) {
+    if (inventory?['equippedArmor'] != null) {
+      final armor = inventory['equippedArmor'];
+      if (armor is Map<String, dynamic>) {
+        equippedArmorId = armor['itemId'] ?? armor['id'];
+        setState(() {
+          armorId = equippedArmorId;
+        });
+      }
+    } else if (inventory?['armor'] != null) {
       final armor = inventory['armor'];
       if (armor is Map<String, dynamic>) {
-        equippedArmorId = armor['id'];
+        equippedArmorId = armor['itemId'] ?? armor['id'];
         setState(() {
-          armorId = armor['id'];
+          armorId = equippedArmorId;
         });
       }
     } else if (inventory?['armor_id'] != null) {
       equippedArmorId = inventory['armor_id'];
       setState(() {
-        armorId = inventory['armor_id'];
+        armorId = equippedArmorId;
       });
     }
 
-    // 장착된 무기 ID 확인 (백엔드 구조에 따라 두 가지 형식 지원)
-    // 형식 1: inventory['weapon']['id'] 또는 형식 2: inventory['weapon_id']
+    // 장착된 무기 ID 확인 (백엔드 구조에 따라 여러 형식 지원)
+    // 형식 1: equippedWeapon (새로운 백엔드 구조)
+    // 형식 2: weapon (구형식)
+    // 형식 3: weapon_id (ID만)
     String? equippedWeaponId;
-    if (inventory?['weapon'] != null) {
+    if (inventory?['equippedWeapon'] != null) {
+      final weapon = inventory['equippedWeapon'];
+      if (weapon is Map<String, dynamic>) {
+        equippedWeaponId = weapon['itemId'] ?? weapon['id'];
+        setState(() {
+          weaponId = equippedWeaponId;
+        });
+      }
+    } else if (inventory?['weapon'] != null) {
       final weapon = inventory['weapon'];
       if (weapon is Map<String, dynamic>) {
-        equippedWeaponId = weapon['id'];
+        equippedWeaponId = weapon['itemId'] ?? weapon['id'];
         setState(() {
-          weaponId = weapon['id'];
+          weaponId = equippedWeaponId;
         });
       }
     } else if (inventory?['weapon_id'] != null) {
       equippedWeaponId = inventory['weapon_id'];
       setState(() {
-        weaponId = inventory['weapon_id'];
+        weaponId = equippedWeaponId;
       });
     }
 
     // 펫 정보 (착용 아이템이므로 inventoryItems에 추가하지 않음)
-    if (inventory?['pet'] != null) {
+    if (inventory?['pets'] != null) {
+      final pets = inventory['pets'];
+      if (pets is List && pets.isNotEmpty) {
+        final pet = pets[0];
+        if (pet is Map<String, dynamic>) {
+          setState(() {
+            petId = pet['itemId'] ?? pet['id'];
+          });
+        } else {
+          setState(() {
+            petId = pet.toString();
+          });
+        }
+      }
+    } else if (inventory?['pet'] != null) {
       final pet = inventory['pet'];
       if (pet is Map<String, dynamic>) {
         setState(() {
-          petId = pet['id'];
-        });
-      }
-    } else if (inventory?['pets'] != null) {
-      // 백엔드에서 pets가 JSON 문자열이나 배열로 올 수 있음
-      final pets = inventory['pets'];
-      if (pets is List && pets.isNotEmpty) {
-        setState(() {
-          petId = pets[0] is Map ? pets[0]['id'] : pets[0].toString();
+          petId = pet['itemId'] ?? pet['id'];
         });
       }
     }
 
-    // 구매한 아이템들만 inventoryItems에 추가 (포션 등)
-    // 단, 장착된 아이템은 제외하고, 포션은 quantity > 0인 경우만 추가
-    if (inventory?['items'] != null) {
-      final items = inventory['items'] as List<dynamic>;
-      
-      for (var item in items) {
-        final itemData = InventoryItem.fromJson(item);
-        final itemId = itemData.itemId;
-        
-        // 장착된 갑옷이나 무기와 같은 itemId면 제외 (빈 칸으로 표시)
-        if (itemId == equippedArmorId || itemId == equippedWeaponId) {
-          continue;
+    // 구매한 아이템들 처리
+    // 백엔드 구조: armors, weapons 배열과 items 배열을 모두 확인
+    List<dynamic> allItems = [];
+
+    // armors 배열 처리 (모든 갑옷 수집 - 3x3 그리드용)
+    if (inventory?['armors'] != null && inventory['armors'] is List) {
+      final armors = inventory['armors'] as List<dynamic>;
+      for (var armor in armors) {
+        if (armor is Map<String, dynamic>) {
+          final itemId = armor['itemId'] ?? armor['id'];
+          if (itemId != null) {
+            final armorItem = InventoryItem(
+              itemId: itemId,
+              name: armor['name'] ?? '',
+              description: armor['description'] ?? '',
+              itemType: 'ARMOR',
+              quantity: 1,
+              stats: {
+                'defense': armor['statValue'] ?? armor['def'] ?? 0,
+              },
+            );
+            ownedArmors.add(armorItem);
+            
+            // 장착되지 않은 갑옷만 inventoryItems에 추가
+            if (itemId != equippedArmorId) {
+              allItems.add({
+                'itemId': itemId,
+                'name': armor['name'] ?? '',
+                'description': armor['description'] ?? '',
+                'itemType': 'ARMOR',
+                'quantity': 1,
+                'stats': {
+                  'defense': armor['statValue'] ?? armor['def'] ?? 0,
+                },
+              });
+            }
+          }
         }
-        
-        // 포션의 경우 quantity가 0보다 큰 경우만 추가 (백엔드에서 이미 사용한 개수를 뺀 값이 quantity에 반영됨)
-        if (itemData.itemType.toUpperCase() == 'POTION' && itemData.quantity <= 0) {
-          continue;
-        }
-        
-        inventoryItems.add(itemData);
       }
     }
     
+    // 장착된 갑옷도 ownedArmors에 추가 (armors 배열에 없는 경우)
+    if (equippedArmorId != null) {
+      bool hasEquippedArmor = ownedArmors.any((a) => a.itemId == equippedArmorId);
+      if (!hasEquippedArmor) {
+        // 장착된 갑옷 정보를 inventory에서 찾기
+        Map<String, dynamic>? equippedArmorData;
+        if (inventory?['equippedArmor'] != null && inventory['equippedArmor'] is Map) {
+          equippedArmorData = inventory['equippedArmor'] as Map<String, dynamic>;
+        } else if (inventory?['armor'] != null && inventory['armor'] is Map) {
+          equippedArmorData = inventory['armor'] as Map<String, dynamic>;
+        }
+        
+        if (equippedArmorData != null) {
+          ownedArmors.add(InventoryItem(
+            itemId: equippedArmorId,
+            name: equippedArmorData['name'] ?? '',
+            description: equippedArmorData['description'] ?? '',
+            itemType: 'ARMOR',
+            quantity: 1,
+            stats: {
+              'defense': equippedArmorData['statValue'] ?? equippedArmorData['def'] ?? 0,
+            },
+          ));
+        }
+      }
+    }
+
+    // weapons 배열 처리 (모든 무기 수집 - 3x3 그리드용)
+    if (inventory?['weapons'] != null && inventory['weapons'] is List) {
+      final weapons = inventory['weapons'] as List<dynamic>;
+      for (var weapon in weapons) {
+        if (weapon is Map<String, dynamic>) {
+          final itemId = weapon['itemId'] ?? weapon['id'];
+          if (itemId != null) {
+            final weaponItem = InventoryItem(
+              itemId: itemId,
+              name: weapon['name'] ?? '',
+              description: weapon['description'] ?? '',
+              itemType: 'WEAPON',
+              quantity: 1,
+              stats: {
+                'attack': weapon['statValue'] ?? weapon['atk'] ?? 0,
+              },
+            );
+            ownedWeapons.add(weaponItem);
+            
+            // 장착되지 않은 무기만 inventoryItems에 추가
+            if (itemId != equippedWeaponId) {
+              allItems.add({
+                'itemId': itemId,
+                'name': weapon['name'] ?? '',
+                'description': weapon['description'] ?? '',
+                'itemType': 'WEAPON',
+                'quantity': 1,
+                'stats': {
+                  'attack': weapon['statValue'] ?? weapon['atk'] ?? 0,
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    // 장착된 무기도 ownedWeapons에 추가 (weapons 배열에 없는 경우)
+    if (equippedWeaponId != null) {
+      bool hasEquippedWeapon = ownedWeapons.any((w) => w.itemId == equippedWeaponId);
+      if (!hasEquippedWeapon) {
+        // 장착된 무기 정보를 inventory에서 찾기
+        Map<String, dynamic>? equippedWeaponData;
+        if (inventory?['equippedWeapon'] != null && inventory['equippedWeapon'] is Map) {
+          equippedWeaponData = inventory['equippedWeapon'] as Map<String, dynamic>;
+        } else if (inventory?['weapon'] != null && inventory['weapon'] is Map) {
+          equippedWeaponData = inventory['weapon'] as Map<String, dynamic>;
+        }
+        
+        if (equippedWeaponData != null) {
+          ownedWeapons.add(InventoryItem(
+            itemId: equippedWeaponId,
+            name: equippedWeaponData['name'] ?? '',
+            description: equippedWeaponData['description'] ?? '',
+            itemType: 'WEAPON',
+            quantity: 1,
+            stats: {
+              'attack': equippedWeaponData['statValue'] ?? equippedWeaponData['atk'] ?? 0,
+            },
+          ));
+        }
+      }
+    }
+
+    // items 배열 처리 (기존 형식 지원)
+    if (inventory?['items'] != null && inventory['items'] is List) {
+      final items = inventory['items'] as List<dynamic>;
+      for (var item in items) {
+        if (item is Map<String, dynamic>) {
+          final itemData = InventoryItem.fromJson(item);
+          final itemId = itemData.itemId;
+          final itemType = itemData.itemType.toUpperCase();
+
+          // 갑옷, 무기, 펫을 3x3 그리드용 리스트에 추가
+          if (itemType == 'ARMOR') {
+            if (!ownedArmors.any((a) => a.itemId == itemId)) {
+              ownedArmors.add(itemData);
+            }
+          } else if (itemType == 'WEAPON') {
+            if (!ownedWeapons.any((w) => w.itemId == itemId)) {
+              ownedWeapons.add(itemData);
+            }
+          } else if (itemType == 'PET') {
+            if (!ownedPets.any((p) => p.itemId == itemId)) {
+              ownedPets.add(itemData);
+            }
+          }
+
+          // 장착된 갑옷이나 무기와 같은 itemId면 제외
+          if (itemId == equippedArmorId || itemId == equippedWeaponId) {
+            continue;
+          }
+
+          // 포션의 경우 quantity가 0보다 큰 경우만 추가
+          if (itemType == 'POTION' && itemData.quantity <= 0) {
+            continue;
+          }
+
+          allItems.add(item);
+        }
+      }
+    }
+    
+    // 펫 정보를 ownedPets에 추가
+    // pets 배열에서 모든 펫 수집
+    if (inventory?['pets'] != null && inventory['pets'] is List) {
+      final pets = inventory['pets'] as List<dynamic>;
+      for (var pet in pets) {
+        if (pet is Map<String, dynamic>) {
+          final petItemId = pet['itemId'] ?? pet['id'];
+          if (petItemId != null && !ownedPets.any((p) => p.itemId == petItemId)) {
+            ownedPets.add(InventoryItem(
+              itemId: petItemId,
+              name: pet['name'] ?? '',
+              description: pet['description'] ?? '',
+              itemType: 'PET',
+              quantity: 1,
+            ));
+            print('✅ 펫 추가: itemId=$petItemId');
+          }
+        }
+      }
+    } else if (inventory?['pet'] != null) {
+      final pet = inventory['pet'];
+      if (pet is Map<String, dynamic>) {
+        final petItemId = pet['itemId'] ?? pet['id'] ?? petId;
+        if (petItemId != null && !ownedPets.any((p) => p.itemId == petItemId)) {
+          ownedPets.add(InventoryItem(
+            itemId: petItemId,
+            name: pet['name'] ?? '',
+            description: pet['description'] ?? '',
+            itemType: 'PET',
+            quantity: 1,
+          ));
+          print('✅ 펫 추가: itemId=$petItemId');
+        }
+      }
+    }
+    
+    // petId가 있지만 아직 ownedPets에 없는 경우 추가
+    if (petId != null && !ownedPets.any((p) => p.itemId == petId)) {
+      ownedPets.add(InventoryItem(
+        itemId: petId!,
+        name: petId!,
+        description: '',
+        itemType: 'PET',
+        quantity: 1,
+      ));
+      print('✅ 펫 추가 (기본): itemId=$petId');
+    }
+
+    // 모든 아이템을 inventoryItems에 추가
+    for (var item in allItems) {
+      try {
+        final itemData = InventoryItem.fromJson(item);
+        inventoryItems.add(itemData);
+      } catch (e) {
+        print('아이템 파싱 오류: $e, item: $item');
+      }
+    }
+
     // 백엔드의 potions 필드가 있고 items 배열에 포션이 없는 경우 처리
-    // (백엔드에서 potions 필드를 직접 관리하는 경우)
-    if (inventory?['potions'] != null && 
-        inventory?['potions'] is int && 
+    if (inventory?['potions'] != null &&
+        inventory?['potions'] is int &&
         (inventory?['potions'] as int) > 0) {
       // items 배열에 이미 포션이 있는지 확인
       bool hasPotion = false;
@@ -342,7 +572,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           break;
         }
       }
-      
+
       // items 배열에 포션이 없으면 백엔드의 potions 필드로 추가
       if (!hasPotion) {
         inventoryItems.add(InventoryItem(
@@ -377,20 +607,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 const SizedBox(height: 20), // 상단 여백 추가 (Shop과 동일)
                 // 상단 제목 영역 (Shop, MyPage와 동일한 스타일)
                 _buildTopTitleSection(context),
-                
+
                 const SizedBox(height: 60), // 그리드 패널을 아래로 이동
                 // 인벤토리 패널들
                 Expanded(
                   child: isLoading
                       ? Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                    ),
+                  )
                       : _buildInventoryPanels(),
                 ),
-                // 하단 Start 버튼
-                _buildBottomButtonSection(),
               ],
             ),
           ),
@@ -402,28 +630,28 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // HP바 이미지 경로 반환 (현재 HP에 따라)
   String getHPBarImagePath() {
     if (maxHP == 0) return 'assets/images/Icon_HpXp_EmptyBar.png';
-    
+
     double hpRatio = currentHP / maxHP;
     int barLevel = (hpRatio * 10).ceil();
     barLevel = barLevel.clamp(1, 10);
-    
+
     return 'assets/images/Icon_HPBar_$barLevel.png';
   }
 
   // XP바 이미지 경로 반환 (현재 XP에 따라)
   String getXPBarImagePath() {
     if (maxXP == 0) return 'assets/images/Icon_HpXp_EmptyBar.png';
-    
+
     double xpRatio = currentXP / maxXP;
     int barLevel = (xpRatio * 10).ceil();
     barLevel = barLevel.clamp(1, 10);
-    
+
     return 'assets/images/Icon_XpBar_$barLevel.png';
   }
 
   // 캐릭터 이미지 경로 반환 (성별에 따라)
   String getCharacterImagePath() {
-    return gender == 'female' 
+    return gender == 'female'
         ? 'assets/images/Female_Character.png'
         : 'assets/images/MaleCharacter.png';
   }
@@ -431,93 +659,110 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // 갑옷 이미지 경로 반환
   String getArmorImagePath() {
     if (armorId == null) return '';
-    
+
     final armorImages = {
       'leather_armor': 'assets/images/Leather_Armor.png',
       'silver_armor': 'assets/images/SilverArmor.png',
       'gold_armor': 'assets/images/GoldArmor.png',
     };
-    
+
     return armorImages[armorId!] ?? '';
   }
 
   // 무기 이미지 경로 반환
   String getWeaponImagePath() {
     if (weaponId == null) return '';
-    
+
     final weaponImages = {
       'wooden_sword': 'assets/images/wooden_sword.png',
       'silver_sword': 'assets/images/silver_sword.png',
       'gold_sword': 'assets/images/golden_sword.png',
     };
-    
+
     return weaponImages[weaponId!] ?? '';
   }
 
   // 펫 이미지 경로 반환
   String getPetImagePath() {
     if (petId == null) return '';
-    
+
     final petImages = {
       'cat': 'assets/images/Pet_Cat.png',
       'dog': 'assets/images/Pet_Dog.png',
       'rabbit': 'assets/images/Pet_Rabbit.png',
     };
-    
+
     return petImages[petId!] ?? '';
   }
 
   // 인벤토리 아이템 이미지 경로 반환
   String _getItemImagePath(String itemId, String itemType) {
+    // itemId를 소문자로 변환하여 대소문자 구분 없이 매칭
+    final normalizedItemId = itemId.toLowerCase().trim();
+    
     final itemImages = {
       // 갑옷
       'basic_clothes': 'assets/images/BasicClothes.png',
       'gold_armor': 'assets/images/GoldArmor.png',
       'silver_armor': 'assets/images/SilverArmor.png',
       'leather_armor': 'assets/images/Leather_Armor.png',
-      
+
       // 무기
-      'wooden_stick': 'assets/images/WoodenStick.png',
+      'starting_weapon': 'assets/images/WoodenStick.png',
       'wooden_sword': 'assets/images/wooden_sword.png',
+      'wood_sword': 'assets/images/wooden_sword.png', // 변형
       'silver_sword': 'assets/images/sliver_sword.png',
       'gold_sword': 'assets/images/golden_sword.png',
-      
+      'golden_sword': 'assets/images/golden_sword.png', // 변형
+
       // 펫
       'cat': 'assets/images/Pet_Cat.png',
       'dog': 'assets/images/Pet_Dog.png',
       'rabbit': 'assets/images/Pet_Rabbit.png',
-      
+      'pet_cat': 'assets/images/Pet_Cat.png', // 변형
+      'pet_dog': 'assets/images/Pet_Dog.png', // 변형
+      'pet_rabbit': 'assets/images/Pet_Rabbit.png', // 변형
+      'pet_cute': 'assets/images/Pet_Cat.png', // 귀여운 펫 (기본적으로 Cat 사용)
+
       // 포션
       'magic_potion': 'assets/images/MagicPotion.png',
+      'potion': 'assets/images/MagicPotion.png', // 변형
     };
+
+    final imagePath = itemImages[normalizedItemId];
     
-    return itemImages[itemId] ?? 'assets/images/default_item.png';
+    // 기본 이미지가 없으면 itemType에 따라 기본 이미지 반환
+    if (imagePath == null) {
+      // 디버깅: itemId가 매핑되지 않은 경우 로그 출력
+      print('⚠️ 이미지 경로를 찾을 수 없음: itemId=$itemId (normalized=$normalizedItemId), itemType=$itemType');
+      
+      final itemTypeUpper = itemType.toUpperCase();
+      if (itemTypeUpper == 'WEAPON') {
+        return 'assets/images/wooden_sword.png'; // 기본 무기
+      } else if (itemTypeUpper == 'PET') {
+        return 'assets/images/Pet_Cat.png'; // 기본 펫
+      } else if (itemTypeUpper == 'ARMOR') {
+        return 'assets/images/Leather_Armor.png'; // 기본 갑옷
+      }
+      
+      // 최종 기본값
+      return 'assets/images/Leather_Armor.png';
+    }
+    
+    return imagePath;
   }
 
   // 3x3 그리드에 아이템 배치 (왼쪽부터 갑옷, 무기, 펫 세로줄)
-  // 각 네모칸의 정확한 위치에 아이템 배치
+  // 각 네모칸의 정확한 위치에 아이템 배치 (사용자 인벤토리 데이터 기반)
   List<Widget> _build3x3GridItems(double panelWidth, double panelHeight) {
-    // 아이템 정의 (순서대로 위에서 아래로)
-    final armors = [
-      {'id': 'leather_armor', 'name': 'Leather Armor'},
-      {'id': 'silver_armor', 'name': 'Silver Armor'},
-      {'id': 'gold_armor', 'name': 'Gold Armor'},
-    ];
+    // 디버깅: 현재 수집된 아이템 목록 출력
+    print('📦 3x3 그리드 아이템 수집:');
+    print('   갑옷: ${ownedArmors.map((a) => a.itemId).toList()}');
+    print('   무기: ${ownedWeapons.map((w) => w.itemId).toList()}');
+    print('   펫: ${ownedPets.map((p) => p.itemId).toList()}');
     
-    final weapons = [
-      {'id': 'wooden_sword', 'name': 'Wooden Sword'},
-      {'id': 'silver_sword', 'name': 'Silver Sword'},
-      {'id': 'gold_sword', 'name': 'Gold Sword'},
-    ];
-    
-    final pets = [
-      {'id': 'cat', 'name': 'Cat'},
-      {'id': 'dog', 'name': 'Dog'},
-      {'id': 'rabbit', 'name': 'Rabbit'},
-    ];
-
     List<Widget> items = [];
-    
+
     // 패널의 패딩을 고려한 실제 그리드 영역 계산
     // 일반적으로 이미지 가장자리에 약간의 패딩이 있으므로 약 5% 정도 여백 고려
     final padding = 0.05; // 5% 패딩
@@ -525,26 +770,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final gridStartY = panelHeight * padding;
     final gridWidth = panelWidth * (1 - padding * 2);
     final gridHeight = panelHeight * (1 - padding * 2);
-    
+
     // 3x3 그리드 셀 크기 계산
     final cellWidth = gridWidth / 3;
     final cellHeight = gridHeight / 3;
-    
+
     // 아이템 크기
     const itemSize = 45.0;
     const itemHalfSize = itemSize / 2; // 22.5
-    
+
     // 각 네모칸의 중심 위치 계산
     // 맨 밑줄(3행) 아이템은 위치를 조금 올리기 위한 오프셋
     const bottomRowOffset = -8.0; // 밑줄 아이템을 8px 올림
-    
-    // 1열: 갑옷 (왼쪽 세로줄) - 위에서 아래로: 가죽, 실버, 골드
-    for (int row = 0; row < 3; row++) {
-      final armor = armors[row];
+
+    // 1열: 갑옷 (왼쪽 세로줄) - 사용자가 소유한 갑옷들 (최대 3개)
+    for (int row = 0; row < 3 && row < ownedArmors.length; row++) {
+      final armor = ownedArmors[row];
       final cellCenterX = gridStartX + cellWidth * 0.5; // 첫 번째 열 중심
       final cellCenterY = gridStartY + cellHeight * (row + 0.5); // 각 행의 중심
       final offsetY = row == 2 ? bottomRowOffset : 0.0; // 맨 밑줄만 오프셋 적용
-      
+
       items.add(
         Positioned(
           left: cellCenterX - itemHalfSize, // 셀 중심 - 아이템 크기/2
@@ -552,22 +797,33 @@ class _InventoryScreenState extends State<InventoryScreen> {
           width: itemSize,
           height: itemSize,
           child: Image.asset(
-            _getItemImagePath(armor['id']!, 'ARMOR'),
+            _getItemImagePath(armor.itemId, 'ARMOR'),
             width: itemSize,
             height: itemSize,
             fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // 이미지 로드 실패 시 빈 컨테이너
+              return Container(
+                width: itemSize,
+                height: itemSize,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  border: Border.all(color: Colors.grey, width: 1),
+                ),
+              );
+            },
           ),
         ),
       );
     }
-    
-    // 2열: 무기 (가운데 세로줄) - 위에서 아래로: 나무, 실버, 골드
-    for (int row = 0; row < 3; row++) {
-      final weapon = weapons[row];
+
+    // 2열: 무기 (가운데 세로줄) - 사용자가 소유한 무기들 (최대 3개)
+    for (int row = 0; row < 3 && row < ownedWeapons.length; row++) {
+      final weapon = ownedWeapons[row];
       final cellCenterX = gridStartX + cellWidth * 1.5; // 두 번째 열 중심
       final cellCenterY = gridStartY + cellHeight * (row + 0.5); // 각 행의 중심
       final offsetY = row == 2 ? bottomRowOffset : 0.0; // 맨 밑줄만 오프셋 적용
-      
+
       items.add(
         Positioned(
           left: cellCenterX - itemHalfSize, // 셀 중심 - 아이템 크기/2
@@ -575,22 +831,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
           width: itemSize,
           height: itemSize,
           child: Image.asset(
-            _getItemImagePath(weapon['id']!, 'WEAPON'),
+            _getItemImagePath(weapon.itemId, 'WEAPON'),
             width: itemSize,
             height: itemSize,
             fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // 이미지 로드 실패 시 디버깅 정보와 함께 빈 컨테이너
+              print('❌ 무기 이미지 로드 실패: itemId=${weapon.itemId}, 경로=${_getItemImagePath(weapon.itemId, "WEAPON")}, 오류: $error');
+              return Container(
+                width: itemSize,
+                height: itemSize,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  border: Border.all(color: Colors.red, width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    weapon.itemId.length > 8 ? '${weapon.itemId.substring(0, 8)}...' : weapon.itemId,
+                    style: TextStyle(fontSize: 8, color: Colors.red),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       );
     }
-    
-    // 3열: 펫 (오른쪽 세로줄) - 위에서 아래로: 고양이, 개, 토끼
-    for (int row = 0; row < 3; row++) {
-      final pet = pets[row];
+
+    // 3열: 펫 (오른쪽 세로줄) - 사용자가 소유한 펫들 (최대 3개)
+    for (int row = 0; row < 3 && row < ownedPets.length; row++) {
+      final pet = ownedPets[row];
       final cellCenterX = gridStartX + cellWidth * 2.5; // 세 번째 열 중심
       final cellCenterY = gridStartY + cellHeight * (row + 0.5); // 각 행의 중심
       final offsetY = row == 2 ? bottomRowOffset : 0.0; // 맨 밑줄만 오프셋 적용
-      
+
       items.add(
         Positioned(
           left: cellCenterX - itemHalfSize, // 셀 중심 - 아이템 크기/2
@@ -598,15 +872,33 @@ class _InventoryScreenState extends State<InventoryScreen> {
           width: itemSize,
           height: itemSize,
           child: Image.asset(
-            _getItemImagePath(pet['id']!, 'PET'),
+            _getItemImagePath(pet.itemId, 'PET'),
             width: itemSize,
             height: itemSize,
             fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // 이미지 로드 실패 시 디버깅 정보와 함께 빈 컨테이너
+              print('❌ 펫 이미지 로드 실패: itemId=${pet.itemId}, 경로=${_getItemImagePath(pet.itemId, "PET")}, 오류: $error');
+              return Container(
+                width: itemSize,
+                height: itemSize,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  border: Border.all(color: Colors.red, width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    pet.itemId.length > 8 ? '${pet.itemId.substring(0, 8)}...' : pet.itemId,
+                    style: TextStyle(fontSize: 8, color: Colors.red),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       );
     }
-    
+
     return items;
   }
 
@@ -649,14 +941,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
               children: [
                 Image.asset(
                   'assets/images/Icon_Gold.png',
-                  width: 24,
-                  height: 24,
+                  width: 30,
+                  height: 30,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   gold.toString(),
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 30,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                     fontFamily: 'DungGeunMo',
@@ -683,7 +975,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             builder: (context, constraints) {
               final panelWidth = constraints.maxWidth;
               final panelHeight = 320.0;
-              
+
               return Container(
                 width: double.infinity,
                 height: panelHeight,
@@ -728,7 +1020,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     'Items',
                     style: TextStyle(
                       color: Colors.black,
-                      fontSize: 18,
+                      fontSize: 30,
                       fontFamily: 'DungGeunMo',
                       fontWeight: FontWeight.bold,
                       decoration: TextDecoration.none,
@@ -762,10 +1054,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
           child: armorId != null
               ? _buildEquippedItemForBox(getArmorImagePath())
               : Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
-                  ),
-                ),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+            ),
+          ),
         ),
         // 두 번째 박스 (무기)
         Container(
@@ -774,10 +1066,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
           child: weaponId != null
               ? _buildEquippedItemForBox(getWeaponImagePath())
               : Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
-                  ),
-                ),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+            ),
+          ),
         ),
         // 세 번째 박스 (펫)
         Container(
@@ -786,10 +1078,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
           child: petId != null
               ? _buildEquippedItemForBox(getPetImagePath())
               : Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
-                  ),
-                ),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+            ),
+          ),
         ),
       ],
     );
@@ -849,7 +1141,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     // 단, 현재 장착된 갑옷은 제외 (장착된 아이템은 빈 칸으로 표시)
     final allowedArmors = ['gold_armor', 'silver_armor', 'leather_armor'];
     for (var item in inventoryItems) {
-      if (item.itemType.toUpperCase() == 'ARMOR' && 
+      if (item.itemType.toUpperCase() == 'ARMOR' &&
           allowedArmors.contains(item.itemId) &&
           item.itemId != armorId) { // 장착된 갑옷이 아닌 경우만 표시
         return _buildPurchasedItemForBox(item, isArmor: true);
@@ -868,7 +1160,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     // 단, 현재 장착된 무기는 제외 (장착된 아이템은 빈 칸으로 표시)
     final allowedWeapons = ['gold_sword', 'silver_sword', 'wooden_sword'];
     for (var item in inventoryItems) {
-      if (item.itemType.toUpperCase() == 'WEAPON' && 
+      if (item.itemType.toUpperCase() == 'WEAPON' &&
           allowedWeapons.contains(item.itemId) &&
           item.itemId != weaponId) { // 장착된 무기가 아닌 경우만 표시
         return _buildPurchasedItemForBox(item);
@@ -886,7 +1178,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     // 포션 아이템만 찾기 (magic_potion만)
     // quantity가 0보다 큰 경우만 표시 (사용한 포션은 제외)
     for (var item in inventoryItems) {
-      if (item.itemType.toUpperCase() == 'POTION' && 
+      if (item.itemType.toUpperCase() == 'POTION' &&
           item.itemId == 'magic_potion' &&
           item.quantity > 0) { // 남은 개수가 있는 경우만 표시
         return _buildPurchasedItemForBox(item);
@@ -904,7 +1196,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     // 아이템 타입에 따라 크기 결정: 갑옷과 무기는 45x45, 포션은 40x40
     final isPotion = item.itemType.toUpperCase() == 'POTION';
     final itemSize = (isPotion) ? 40.0 : 45.0;
-    
+
     return Container(
       width: 65,
       height: 65,
@@ -983,25 +1275,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
         Container(
           width: 80,
           height: 80,
-          child: inventoryItems.length > 0 
-            ? _buildInventoryItemForBox(inventoryItems[0])
-            : Container(),
+          child: inventoryItems.length > 0
+              ? _buildInventoryItemForBox(inventoryItems[0])
+              : Container(),
         ),
         // 두 번째 박스 (가운데)
         Container(
           width: 80,
           height: 80,
-          child: inventoryItems.length > 1 
-            ? _buildInventoryItemForBox(inventoryItems[1])
-            : Container(),
+          child: inventoryItems.length > 1
+              ? _buildInventoryItemForBox(inventoryItems[1])
+              : Container(),
         ),
         // 세 번째 박스 (오른쪽)
         Container(
           width: 80,
           height: 80,
-          child: inventoryItems.length > 2 
-            ? _buildInventoryItemForBox(inventoryItems[2])
-            : Container(),
+          child: inventoryItems.length > 2
+              ? _buildInventoryItemForBox(inventoryItems[2])
+              : Container(),
         ),
       ],
     );
@@ -1154,55 +1446,4 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _buildBottomButtonSection() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 상점 아이콘 (왼쪽)
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ShopScreen()),
-              );
-            },
-            child: Image.asset(
-              'assets/images/Icon_Shop.png',
-              width: 45,
-              height: 45,
-            ),
-          ),
-          // Start 버튼 (오른쪽)
-          GestureDetector(
-            onTap: () {
-              // Start 버튼 클릭 시 동작
-              print('Start button tapped');
-            },
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset(
-                  'assets/images/MainButton.png',
-                  width: 280,
-                  height: 80,
-                ),
-                const Text(
-                  'Start',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 24,
-                    fontFamily: 'DungGeunMo',
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
