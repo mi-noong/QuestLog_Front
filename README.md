@@ -1,7 +1,8 @@
 # QuestLog_Front
-WelcomScreen -> SettingScreen </br>
+WelcomScreen -> BattleScreen </br>
 # Design
-assets/images -> 이미지 파일 업로드
+assets/images -> 이미지 파일 업로드 </br>
+assets/images/rpg -> 전투 이미지 파일 업로드
 </br>
 # Create
 SettingScreen.dart</br>
