@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'IdSuccessScreen.dart';
+import 'config/api_config.dart';
 
 class IdScreen extends StatefulWidget {
   const IdScreen({super.key});
@@ -36,7 +37,6 @@ class _IdScreenState extends State<IdScreen> {
       _errorMessage = null;
     });
 
-    final baseUrl = 'http://192.168.219.110:8083';
     try {
       final requestBody = {
         'username': _nameController.text,
@@ -44,10 +44,10 @@ class _IdScreenState extends State<IdScreen> {
       };
       
       print('요청 데이터: $requestBody');
-      print('요청 URL: $baseUrl/api/auth/find-id/send-code');
+      print('요청 URL: ${ApiConfig.findIdSendCodeEndpoint}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/find-id/send-code'),
+        Uri.parse(ApiConfig.findIdSendCodeEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(requestBody),
       ).timeout(const Duration(seconds: 30));
@@ -113,7 +113,6 @@ class _IdScreenState extends State<IdScreen> {
       _verificationMessage = null;
     });
 
-    final baseUrl = 'http://192.168.219.110:8083';
     try {
       final requestBody = {
         'username': _nameController.text.trim(),
@@ -122,10 +121,10 @@ class _IdScreenState extends State<IdScreen> {
       };
       
       print('인증번호 확인 요청 데이터: $requestBody');
-      print('인증번호 확인 요청 URL: $baseUrl/api/auth/find-id/verify-code');
+      print('인증번호 확인 요청 URL: ${ApiConfig.findIdVerifyCodeEndpoint}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/find-id/verify-code'),
+        Uri.parse(ApiConfig.findIdVerifyCodeEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(requestBody),
       ).timeout(const Duration(seconds: 30));
@@ -217,7 +216,7 @@ class _IdScreenState extends State<IdScreen> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  height: 70,
+                  height: 60,
                   decoration: BoxDecoration(
                     image: const DecorationImage(
                       image: AssetImage('assets/images/InputBar.png'),
@@ -257,7 +256,7 @@ class _IdScreenState extends State<IdScreen> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  height: 70,
+                  height: 60,
                   decoration: BoxDecoration(
                     image: const DecorationImage(
                       image: AssetImage('assets/images/InputBar.png'),
