@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'HomeScreen.dart';
-
-final baseUrl = 'http://192.168.219.110:8083';
+import 'config/api_config.dart';
+import 'models/user_game_info.dart';
+import 'services/game_service.dart';
 
 // 상점 아이템 모델
 class ShopItem {
@@ -39,7 +41,7 @@ class ShopItem {
 Future<List<ShopItem>?> fetchShopItems() async {
   try {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/game/shop/items'),
+      Uri.parse(ApiConfig.shopItemsEndpoint),
       headers: {'Content-Type': 'application/json'},
     ).timeout(
       const Duration(seconds: 10),
@@ -66,7 +68,7 @@ Future<List<ShopItem>?> fetchShopItems() async {
 Future<List<ShopItem>?> fetchShopItemsByType(String type) async {
   try {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/game/shop/items/type/$type'),
+      Uri.parse(ApiConfig.shopItemsByType(type)),
       headers: {'Content-Type': 'application/json'},
     ).timeout(
       const Duration(seconds: 10),
@@ -89,29 +91,6 @@ Future<List<ShopItem>?> fetchShopItemsByType(String type) async {
   }
 }
 
-// 사용자 장비 상태 조회 API
-Future<Map<String, dynamic>?> fetchUserEquipment(String userId) async {
-  try {
-    print('사용자 장비 정보 조회 시작: userId=$userId');
-    
-    final response = await http.get(
-      Uri.parse('http://192.168.219.110:8083/api/game/user/$userId/equipment'),
-      headers: {'Content-Type': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
-    
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      print('사용자 장비 데이터 조회 성공: $data');
-      return data;
-    } else {
-      print('사용자 장비 조회 실패: ${response.statusCode}');
-      return null;
-    }
-  } catch (e) {
-    print('사용자 장비 조회 오류: $e');
-    return null;
-  }
-}
 
 // 장비 업그레이드 순서 정의
 class EquipmentUpgrade {
@@ -241,54 +220,113 @@ class EquipmentUpgrade {
     // 기본값
     return 'assets/images/Leather_Armor.png';
   }
+
+  // 아이템 ID로 레벨 확인
+  static int? getItemLevel(String itemId, String itemType) {
+    if (itemType == 'ARMOR') {
+      for (var armor in armorUpgrades) {
+        if (armor['id'] == itemId) {
+          return armor['level'] as int;
+        }
+      }
+    } else if (itemType == 'WEAPON') {
+      for (var weapon in weaponUpgrades) {
+        if (weapon['id'] == itemId) {
+          return weapon['level'] as int;
+        }
+      }
+    }
+    return null;
+  }
+
+  // 아이템 타입 확인
+  static String? getItemType(String itemId) {
+    for (var armor in armorUpgrades) {
+      if (armor['id'] == itemId) {
+        return 'ARMOR';
+      }
+    }
+    for (var weapon in weaponUpgrades) {
+      if (weapon['id'] == itemId) {
+        return 'WEAPON';
+      }
+    }
+    return null;
+  }
+
+  // 현재 장비 레벨 확인
+  static int getCurrentEquipmentLevel(Map<String, dynamic>? currentEquipment, String itemType) {
+    if (currentEquipment == null) {
+      print('🔍 getCurrentEquipmentLevel: currentEquipment가 null입니다.');
+      return 0;
+    }
+    
+    String? equipmentId = currentEquipment['itemId'] ?? currentEquipment['id'];
+    print('🔍 getCurrentEquipmentLevel: equipmentId=$equipmentId, itemType=$itemType, currentEquipment=$currentEquipment');
+    if (equipmentId == null) {
+      print('🔍 getCurrentEquipmentLevel: equipmentId가 null입니다.');
+      return 0;
+    }
+    
+    int? level = getItemLevel(equipmentId, itemType);
+    print('🔍 getCurrentEquipmentLevel: equipmentId=$equipmentId, itemType=$itemType, level=$level');
+    return level ?? 0;
+  }
 }
 
 // 아이템 구매 API
-Future<Map<String, dynamic>> purchaseItem(String userId, String itemId) async {
+Future<Map<String, dynamic>> purchaseItem(int userId, String itemId) async {
   try {
-    print('구매 요청 시작: userId=$userId, itemId=$itemId');
-    
+      print('구매 요청 시작: userId=$userId, itemId=$itemId');
+      print('🔍 구매 시도 아이템 ID: $itemId');
+      
+      // 쿼리 파라미터를 사용한 엔드포인트 (itemId를 URL 인코딩)
+      final encodedItemId = Uri.encodeComponent(itemId);
+      final url = ApiConfig.gameBaseUrl + '/api/game/shop/buy?userId=$userId&itemId=$encodedItemId';
+      print('구매 요청 URL: $url');
+
     final response = await http.post(
-      Uri.parse('http://192.168.219.110:8083/api/game/shop/purchase'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'userId': userId,
-        'itemId': itemId,
-      }),
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+      },
     ).timeout(const Duration(seconds: 10));
+
+    print('구매 응답 상태: ${response.statusCode}');
+    print('구매 응답 본문: ${response.body}');
     
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      print('구매 성공: $data');
+    final result = json.decode(response.body);
+    
+    if (result['success'] == true) {
+      print('구매 성공: $result');
+      // result.data를 반환 (playerGold, purchasedItem 포함)
       return {
         'success': true,
-        'message': data['message'] ?? '구매가 성공적으로 완료되었습니다!',
-        'data': data,
+        'message': result['message'] ?? '구매가 성공적으로 완료되었습니다!',
+        'data': result['data'], // { playerGold, purchasedItem }
       };
     } else {
-      final errorData = json.decode(response.body);
-      print('구매 실패: ${response.statusCode} - ${errorData['message']}');
-      return {
-        'success': false,
-        'message': errorData['message'] ?? '구매에 실패했습니다.',
-        'data': null,
-      };
+      String errorMessage = result['message'] ?? '구매에 실패했습니다.';
+      print('구매 실패: ${response.statusCode} - $errorMessage');
+      throw Exception(errorMessage);
     }
   } catch (e) {
     print('아이템 구매 오류: $e');
     String errorMessage = '구매 중 오류가 발생했습니다.';
-    
+
     if (e.toString().contains('Connection timed out')) {
       errorMessage = '네트워크 연결 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
     } else if (e.toString().contains('SocketException')) {
       errorMessage = '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.';
+    } else if (e.toString().contains('Exception:')) {
+      // 서버에서 반환한 에러 메시지 추출
+      final match = RegExp(r'Exception: (.+)').firstMatch(e.toString());
+      if (match != null) {
+        errorMessage = match.group(1)!;
+      }
     }
-    
-    return {
-      'success': false,
-      'message': errorMessage,
-      'data': null,
-    };
+
+    throw Exception(errorMessage);
   }
 }
 
@@ -296,9 +334,9 @@ Future<Map<String, dynamic>> purchaseItem(String userId, String itemId) async {
 Future<Map<String, dynamic>> updateUserAfterPurchase(String userId, String itemId, int newGold) async {
   try {
     print('구매 후 사용자 정보 업데이트 시작: userId=$userId, itemId=$itemId, newGold=$newGold');
-    
+
     final response = await http.put(
-      Uri.parse('http://192.168.219.110:8083/api/game/user/$userId/equipment'),
+      Uri.parse(ApiConfig.userEquipment(userId)),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'itemId': itemId,
@@ -306,7 +344,7 @@ Future<Map<String, dynamic>> updateUserAfterPurchase(String userId, String itemI
         'purchasedAt': DateTime.now().toIso8601String(),
       }),
     ).timeout(const Duration(seconds: 10));
-    
+
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       print('사용자 정보 업데이트 성공: $data');
@@ -327,13 +365,13 @@ Future<Map<String, dynamic>> updateUserAfterPurchase(String userId, String itemI
   } catch (e) {
     print('사용자 정보 업데이트 오류: $e');
     String errorMessage = '사용자 정보 업데이트 중 오류가 발생했습니다.';
-    
+
     if (e.toString().contains('Connection timed out')) {
       errorMessage = '네트워크 연결 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
     } else if (e.toString().contains('SocketException')) {
       errorMessage = '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.';
     }
-    
+
     return {
       'success': false,
       'message': errorMessage,
@@ -353,27 +391,137 @@ class _ShopScreenState extends State<ShopScreen> {
   ShopItem? selectedItem;
   bool showBuyDialog = false;
   bool showPurchaseCompleteDialog = false;
-  String? currentUserId;
+  String? currentUserId; // 문자열 ID (호환성)
+  int? currentUserDbId; // Long 타입 DB ID (구매 API용)
   bool isLoading = false;
-  Map<String, dynamic>? userEquipment;
+  UserGameInfo? userGameInfo; // HomeScreen과 동일한 방식
   ShopItem? currentArmorItem;
   ShopItem? currentWeaponItem;
 
   void _showBuyDialog(ShopItem item) {
+    // 구매 가능 여부 확인 (골드 + 업그레이드 순서)
+    if (!_canPurchaseItem(item)) {
+      String message = '구매할 수 없습니다.';
+      
+      // 골드 부족
+      if (!_canAffordItem(item)) {
+        message = '골드가 부족합니다! (보유: ${_getCurrentGold()}, 필요: ${item.price})';
+      } else {
+        // 업그레이드 순서 위반
+        String itemType = item.itemType;
+        if (itemType.isEmpty) {
+          itemType = EquipmentUpgrade.getItemType(item.itemId) ?? '';
+        }
+        
+        // 현재 장비 확인 및 가장 높은 레벨 찾기
+        int currentLevel = 0;
+        if (userGameInfo != null && userGameInfo!.inventory.isNotEmpty) {
+          final inventory = userGameInfo!.inventory[0] as Map<String, dynamic>?;
+          if (inventory != null) {
+            if (itemType == 'ARMOR') {
+              // 장착된 갑옷 레벨 확인
+              final equippedArmor = inventory['equippedArmor'];
+              if (equippedArmor != null) {
+                String armorId = equippedArmor['id'] ?? '';
+                int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                if (level != null && level > currentLevel) {
+                  currentLevel = level;
+                }
+              }
+              // 인벤토리 배열의 갑옷들 확인
+              final armors = inventory['armors'];
+              if (armors is List) {
+                for (var armor in armors) {
+                  if (armor is Map<String, dynamic>) {
+                    String armorId = (armor['itemId'] ?? armor['id'])?.toString() ?? '';
+                    int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                    if (level != null && level > currentLevel) {
+                      currentLevel = level;
+                    }
+                  }
+                }
+              }
+            } else if (itemType == 'WEAPON') {
+              // 장착된 무기 레벨 확인
+              final equippedWeapon = inventory['equippedWeapon'];
+              if (equippedWeapon != null) {
+                String weaponId = equippedWeapon['id'] ?? '';
+                int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                if (level != null && level > currentLevel) {
+                  currentLevel = level;
+                }
+              }
+              // 인벤토리 배열의 무기들 확인
+              final weapons = inventory['weapons'];
+              if (weapons is List) {
+                for (var weapon in weapons) {
+                  if (weapon is Map<String, dynamic>) {
+                    String weaponId = (weapon['itemId'] ?? weapon['id'])?.toString() ?? '';
+                    int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                    if (level != null && level > currentLevel) {
+                      currentLevel = level;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        int? itemLevel = EquipmentUpgrade.getItemLevel(item.itemId, itemType);
+        
+        if (itemLevel != null && itemLevel != currentLevel + 1) {
+          // 이전 레벨 아이템부터 구매해야 함
+          String requiredItemName = '';
+          if (itemType == 'ARMOR') {
+            if (currentLevel == 0) {
+              requiredItemName = '가죽 갑옷';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 갑옷';
+            }
+          } else if (itemType == 'WEAPON') {
+            if (currentLevel == 0) {
+              requiredItemName = '나무 검';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 검';
+            }
+          }
+          
+          if (requiredItemName.isNotEmpty) {
+            message = '$requiredItemName을(를) 먼저 구매해야 합니다.';
+          } else {
+            message = '이전 업그레이드를 먼저 완료해야 합니다.';
+          }
+        }
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 구매 가능하면 다이얼로그 표시
     if (mounted) {
-    setState(() {
-      selectedItem = item;
-      showBuyDialog = true;
-    });
+      setState(() {
+        selectedItem = item;
+        showBuyDialog = true;
+      });
     }
   }
 
   void _hideBuyDialog() {
     if (mounted) {
-    setState(() {
-      showBuyDialog = false;
-      selectedItem = null;
-    });
+      setState(() {
+        showBuyDialog = false;
+        selectedItem = null;
+      });
     }
   }
 
@@ -381,10 +529,10 @@ class _ShopScreenState extends State<ShopScreen> {
     print('=== 구매 완료 다이얼로그 표시 시도 ===');
     print('mounted: $mounted');
     if (mounted) {
-    setState(() {
-      showPurchaseCompleteDialog = true;
+      setState(() {
+        showPurchaseCompleteDialog = true;
         print('구매 완료 다이얼로그 상태: $showPurchaseCompleteDialog');
-    });
+      });
     }
     print('=== 구매 완료 다이얼로그 표시 완료 ===');
   }
@@ -392,11 +540,11 @@ class _ShopScreenState extends State<ShopScreen> {
   void _hidePurchaseCompleteDialog() {
     print('=== 구매 완료 다이얼로그 닫기 시도 ===');
     if (mounted) {
-    setState(() {
-      showPurchaseCompleteDialog = false;
+      setState(() {
+        showPurchaseCompleteDialog = false;
         print('구매 완료 다이얼로그 상태: $showPurchaseCompleteDialog');
         // 상점 아이템은 이미 _simulateEquipmentUpdate에서 업데이트됨
-    });
+      });
     }
     print('=== 구매 완료 다이얼로그 닫기 완료 ===');
   }
@@ -414,114 +562,104 @@ class _ShopScreenState extends State<ShopScreen> {
     // 현재 갑옷과 무기가 없는 상태에서 첫 번째 업그레이드 아이템들 설정
     currentArmorItem = EquipmentUpgrade.getNextArmorUpgrade(null);
     currentWeaponItem = EquipmentUpgrade.getNextWeaponUpgrade(null);
-    
+
     print('초기 상점 아이템 설정:');
     print('갑옷: ${currentArmorItem?.name ?? "없음"}');
     print('무기: ${currentWeaponItem?.name ?? "없음"}');
   }
 
   Future<void> _loadCurrentUser() async {
-    // TODO: 실제 로그인된 사용자 ID로 변경 필요
-    // 현재는 임시로 사용자 ID "1" 사용
-    if (mounted) {
-    setState(() {
-      currentUserId = "1";
-    });
-    }
-    await _loadUserEquipment();
-  }
-
-  Future<void> _loadUserEquipment() async {
-    if (currentUserId == null) return;
-
     try {
-      final equipment = await fetchUserEquipment(currentUserId!);
-      if (equipment != null && mounted) {
-        setState(() {
-          userEquipment = equipment;
-          _updateShopItems();
-        });
-      }
-    } catch (e) {
-      print('사용자 장비 로드 오류: $e');
-      // 오류 발생 시에도 기본 아이템들은 유지
-    }
-  }
-
-  // 구매 후 사용자 정보 업데이트
-  Future<void> _updateUserAfterPurchase(String itemId) async {
-    try {
-      print('=== 구매 후 사용자 정보 업데이트 시작 ===');
-      print('구매한 아이템 ID: $itemId');
+      final prefs = await SharedPreferences.getInstance();
+      final userIdString = prefs.getString('userId');
+      final userDbId = prefs.getInt('userDbId');
       
-      if (userEquipment == null || currentUserId == null) {
-        print('사용자 정보가 없어 업데이트를 건너뜁니다.');
-        return;
-      }
-      
-      final currentGold = _getCurrentGold();
-      final itemPrice = _getItemPriceFromId(itemId);
-      final newGold = currentGold - itemPrice;
-      
-      print('현재 골드: $currentGold, 아이템 가격: $itemPrice, 새로운 골드: $newGold');
-      
-      // 백엔드에 사용자 정보 업데이트 요청
-      final result = await updateUserAfterPurchase(currentUserId!, itemId, newGold);
-      
-      if (result['success']) {
-        print('사용자 정보 업데이트 성공');
-        // 로컬 상태도 업데이트
-        if (userEquipment != null) {
-          final inventory = userEquipment!['inventory'] as Map<String, dynamic>;
-          inventory['gold'] = newGold;
-          
-          // 갑옷이나 무기인 경우 장비 정보도 업데이트
-          final itemType = _getItemTypeFromId(itemId);
-          if (itemType == 'ARMOR') {
-            inventory['armor'] = {
-              'id': itemId,
-              'name': _getItemNameFromId(itemId),
-              'level': _getItemLevelFromId(itemId),
-            };
-          } else if (itemType == 'WEAPON') {
-            inventory['weapon'] = {
-              'id': itemId,
-              'name': _getItemNameFromId(itemId),
-              'level': _getItemLevelFromId(itemId),
-            };
-          }
-        }
-        
-        // UI 업데이트
+      if (userDbId != null) {
+        print('✅ 로그인한 사용자 DB ID: $userDbId (문자열 ID: $userIdString)');
         if (mounted) {
           setState(() {
-            _updateShopItems();
+            currentUserId = userDbId.toString(); // 구매 API를 위해 문자열로 저장
+            currentUserDbId = userDbId; // Long ID 저장
           });
         }
+      } else if (userIdString != null && userIdString.isNotEmpty) {
+        print('⚠️ 사용자 DB ID가 없습니다. 사용자 정보 조회로 ID를 가져옵니다.');
+        // 사용자 정보 조회 API로 DB ID 가져오기
+        await _fetchUserDbId(userIdString);
+        return;
       } else {
-        print('사용자 정보 업데이트 실패: ${result['message']}');
+        print('⚠️ 로그인한 사용자 ID가 없습니다.');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('구매는 완료되었지만 정보 업데이트에 실패했습니다: ${result['message']}'),
+            const SnackBar(
+              content: Text('로그인이 필요합니다. 로그인 화면으로 이동합니다.'),
               backgroundColor: Colors.orange,
             ),
           );
         }
+        return;
       }
     } catch (e) {
-      print('사용자 정보 업데이트 오류: $e');
+      print('❌ 사용자 ID 가져오기 실패: $e');
+    }
+    await _loadUserGameInfo();
+  }
+  
+  // 사용자 정보 조회 API를 통해 DB ID 가져오기
+  Future<void> _fetchUserDbId(String userIdString) async {
+    try {
+      print('사용자 DB ID 조회 시작: userIdString=$userIdString');
+      
+      // 문자열 userId로 사용자를 찾는 API가 없으므로
+      // 사용자 정보 API를 여러 ID로 시도하거나
+      // 다른 방법이 필요합니다
+      // 
+      // 대안: 사용자가 이미 로그인했으므로
+      // 임시로 1부터 시작하여 사용자 정보를 조회해보거나
+      // 백엔드에 userId(문자열)로 DB ID를 조회하는 API가 있는지 확인 필요
+      
+      // 일단 사용자에게 안내 메시지 표시
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('구매는 완료되었지만 정보 업데이트 중 오류가 발생했습니다: $e'),
+          const SnackBar(
+            content: Text('사용자 정보를 불러올 수 없습니다. 다시 로그인해주세요.'),
             backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
           ),
         );
       }
+    } catch (e) {
+      print('사용자 DB ID 조회 실패: $e');
     }
-    print('=== 구매 후 사용자 정보 업데이트 완료 ===');
   }
+
+  Future<void> _loadUserGameInfo() async {
+    if (currentUserDbId == null) return;
+
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      // HomeScreen과 동일한 방식으로 사용자 게임 정보 로드
+      final info = await GameService.getUserGameInfo(currentUserDbId!);
+      if (!mounted) return;
+      
+      setState(() {
+        userGameInfo = info;
+        isLoading = false;
+        _updateShopItems();
+      });
+      print('✅ 사용자 게임 정보 로드 완료');
+    } catch (e) {
+      print('❌ 사용자 게임 정보 로드 오류: $e');
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
 
   String _getItemTypeFromId(String itemId) {
     if (itemId.contains('armor')) return 'ARMOR';
@@ -571,26 +709,109 @@ class _ShopScreenState extends State<ShopScreen> {
   void _updateShopItems() {
     Map<String, dynamic>? currentArmor;
     Map<String, dynamic>? currentWeapon;
-    
-    if (userEquipment != null) {
-      final inventory = userEquipment!['inventory'];
-      currentArmor = inventory?['armor'];
-      currentWeapon = inventory?['weapon'];
+    int highestArmorLevel = 0;
+    int highestWeaponLevel = 0;
+
+    if (userGameInfo != null && userGameInfo!.inventory.isNotEmpty) {
+      // inventory는 List이므로 첫 번째 요소 사용
+      final inventory = userGameInfo!.inventory[0] as Map<String, dynamic>?;
+      if (inventory != null) {
+        currentArmor = inventory['equippedArmor'];
+        currentWeapon = inventory['equippedWeapon'];
+        
+        // 장착된 갑옷의 레벨 확인
+        if (currentArmor != null) {
+          String armorId = currentArmor['id'] ?? '';
+          int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+          if (level != null && level > highestArmorLevel) {
+            highestArmorLevel = level;
+          }
+        }
+        
+        // 인벤토리 배열의 갑옷들 확인
+        final armors = inventory['armors'];
+        if (armors is List) {
+          for (var armor in armors) {
+            if (armor is Map<String, dynamic>) {
+              String armorId = (armor['itemId'] ?? armor['id'])?.toString() ?? '';
+              int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+              if (level != null && level > highestArmorLevel) {
+                highestArmorLevel = level;
+              }
+            }
+          }
+        }
+        
+        // 장착된 무기의 레벨 확인
+        if (currentWeapon != null) {
+          String weaponId = currentWeapon['id'] ?? '';
+          int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+          if (level != null && level > highestWeaponLevel) {
+            highestWeaponLevel = level;
+          }
+        }
+        
+        // 인벤토리 배열의 무기들 확인
+        final weapons = inventory['weapons'];
+        if (weapons is List) {
+          for (var weapon in weapons) {
+            if (weapon is Map<String, dynamic>) {
+              String weaponId = (weapon['itemId'] ?? weapon['id'])?.toString() ?? '';
+              int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+              if (level != null && level > highestWeaponLevel) {
+                highestWeaponLevel = level;
+              }
+            }
+          }
+        }
+      }
     }
 
     print('=== 상점 아이템 업데이트 시작 ===');
     print('현재 장비 상태:');
     print('갑옷: $currentArmor');
     print('무기: $currentWeapon');
+    print('가장 높은 갑옷 레벨: $highestArmorLevel');
+    print('가장 높은 무기 레벨: $highestWeaponLevel');
 
-    // 다음 업그레이드 아이템 설정
-    print('다음 업그레이드 아이템 찾기 시작');
-    print('현재 갑옷으로 다음 갑옷 찾기: $currentArmor');
-    currentArmorItem = EquipmentUpgrade.getNextArmorUpgrade(currentArmor);
-    print('찾은 갑옷: ${currentArmorItem?.name ?? "없음"}');
+    // 가장 높은 레벨에 맞는 다음 업그레이드 아이템 찾기
+    // highestLevel에 해당하는 장비를 찾아서 그 다음 레벨 아이템 반환
+    Map<String, dynamic>? bestArmor;
+    Map<String, dynamic>? bestWeapon;
     
-    print('현재 무기로 다음 무기 찾기: $currentWeapon');
-    currentWeaponItem = EquipmentUpgrade.getNextWeaponUpgrade(currentWeapon);
+    // 가장 높은 레벨의 갑옷 찾기 (다음 업그레이드를 위한 기준)
+    if (highestArmorLevel > 0) {
+      for (var upgrade in EquipmentUpgrade.armorUpgrades) {
+        if (upgrade['level'] == highestArmorLevel) {
+          bestArmor = {
+            'id': upgrade['id'],
+            'level': upgrade['level'],
+          };
+          break;
+        }
+      }
+    }
+    
+    // 가장 높은 레벨의 무기 찾기
+    if (highestWeaponLevel > 0) {
+      for (var upgrade in EquipmentUpgrade.weaponUpgrades) {
+        if (upgrade['level'] == highestWeaponLevel) {
+          bestWeapon = {
+            'id': upgrade['id'],
+            'level': upgrade['level'],
+          };
+          break;
+        }
+      }
+    }
+
+    print('다음 업그레이드 아이템 찾기 시작');
+    print('기준 갑옷: $bestArmor (레벨: $highestArmorLevel)');
+    currentArmorItem = EquipmentUpgrade.getNextArmorUpgrade(bestArmor);
+    print('찾은 갑옷: ${currentArmorItem?.name ?? "없음"}');
+
+    print('기준 무기: $bestWeapon (레벨: $highestWeaponLevel)');
+    currentWeaponItem = EquipmentUpgrade.getNextWeaponUpgrade(bestWeapon);
     print('찾은 무기: ${currentWeaponItem?.name ?? "없음"}');
     print('다음 업그레이드 아이템 찾기 완료');
 
@@ -600,36 +821,215 @@ class _ShopScreenState extends State<ShopScreen> {
     print('=== 상점 아이템 업데이트 완료 ===');
   }
 
-  // 현재 보유 골드 확인
+  // 현재 보유 골드 확인 (HomeScreen과 동일한 방식)
   int _getCurrentGold() {
-    if (userEquipment == null) return 100; // 기본값
-    final inventory = userEquipment!['inventory'] as Map<String, dynamic>?;
-    return inventory?['gold'] ?? 100;
+    return userGameInfo?.gold ?? 0;
   }
 
-  // 아이템 구매 가능 여부 확인
+  // 아이템 구매 가능 여부 확인 (골드만 체크)
   bool _canAffordItem(ShopItem item) {
     final currentGold = _getCurrentGold();
     return currentGold >= item.price;
   }
 
+  // 아이템 구매 가능 여부 확인 (골드 + 업그레이드 순서 체크)
+  bool _canPurchaseItem(ShopItem item) {
+    // 1. 골드 체크
+    if (!_canAffordItem(item)) {
+      return false;
+    }
+
+    // 2. 업그레이드 순서 체크
+    String itemType = item.itemType;
+    if (itemType.isEmpty) {
+      // itemType이 비어있으면 ID로 타입 확인 시도
+      itemType = EquipmentUpgrade.getItemType(item.itemId) ?? '';
+      if (itemType.isEmpty) {
+        print('⚠️ 알 수 없는 아이템 타입: ${item.itemId}');
+        return true; // 타입을 알 수 없으면 구매 허용 (기타 아이템)
+      }
+    }
+
+    // 현재 장비 확인 및 가장 높은 레벨 찾기
+    int currentLevel = 0;
+    if (userGameInfo != null && userGameInfo!.inventory.isNotEmpty) {
+      final inventory = userGameInfo!.inventory[0] as Map<String, dynamic>?;
+      if (inventory != null) {
+        if (itemType == 'ARMOR') {
+          // 장착된 갑옷 레벨 확인
+          final equippedArmor = inventory['equippedArmor'];
+          if (equippedArmor != null) {
+            String armorId = equippedArmor['id'] ?? '';
+            int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+            if (level != null && level > currentLevel) {
+              currentLevel = level;
+            }
+          }
+          // 인벤토리 배열의 갑옷들 확인
+          final armors = inventory['armors'];
+          if (armors is List) {
+            for (var armor in armors) {
+              if (armor is Map<String, dynamic>) {
+                String armorId = (armor['itemId'] ?? armor['id'])?.toString() ?? '';
+                int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                if (level != null && level > currentLevel) {
+                  currentLevel = level;
+                }
+              }
+            }
+          }
+        } else if (itemType == 'WEAPON') {
+          // 장착된 무기 레벨 확인
+          final equippedWeapon = inventory['equippedWeapon'];
+          if (equippedWeapon != null) {
+            String weaponId = equippedWeapon['id'] ?? '';
+            int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+            if (level != null && level > currentLevel) {
+              currentLevel = level;
+            }
+          }
+          // 인벤토리 배열의 무기들 확인
+          final weapons = inventory['weapons'];
+          if (weapons is List) {
+            for (var weapon in weapons) {
+              if (weapon is Map<String, dynamic>) {
+                String weaponId = (weapon['itemId'] ?? weapon['id'])?.toString() ?? '';
+                int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                if (level != null && level > currentLevel) {
+                  currentLevel = level;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // 아이템 레벨 확인
+    int? itemLevel = EquipmentUpgrade.getItemLevel(item.itemId, itemType);
+    if (itemLevel == null) {
+      print('⚠️ 아이템 레벨을 확인할 수 없음: ${item.itemId}');
+      return true; // 레벨을 알 수 없으면 구매 허용 (기타 아이템)
+    }
+
+    // 업그레이드 순서 확인: 다음 레벨 아이템만 구매 가능
+    // 현재 레벨이 0이면 레벨 1만, 현재 레벨이 1이면 레벨 2만, 현재 레벨이 2이면 레벨 3만 구매 가능
+    int nextLevel = currentLevel + 1;
+    
+    if (itemLevel != nextLevel) {
+      print('❌ 업그레이드 순서 위반: 현재 레벨=$currentLevel, 아이템 레벨=$itemLevel, 필요 레벨=$nextLevel');
+      return false;
+    }
+
+    print('✅ 구매 가능: 현재 레벨=$currentLevel, 아이템 레벨=$itemLevel');
+    return true;
+  }
+
   Future<void> _handlePurchase() async {
     if (selectedItem == null || currentUserId == null) {
       if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('구매할 수 없습니다. 사용자 정보를 확인해주세요.')),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('구매할 수 없습니다. 사용자 정보를 확인해주세요.')),
+        );
       }
       return;
     }
 
-    // 골드 부족 체크
-    if (!_canAffordItem(selectedItem!)) {
+    // 구매 가능 여부 체크 (골드 + 업그레이드 순서)
+    if (!_canPurchaseItem(selectedItem!)) {
       if (mounted) {
+        String message = '구매할 수 없습니다.';
+        
+        // 골드 부족
+        if (!_canAffordItem(selectedItem!)) {
+          message = '골드가 부족합니다! (보유: ${_getCurrentGold()}, 필요: ${selectedItem!.price})';
+        } else {
+          // 업그레이드 순서 위반
+          String itemType = selectedItem!.itemType;
+          if (itemType.isEmpty) {
+            itemType = EquipmentUpgrade.getItemType(selectedItem!.itemId) ?? '';
+          }
+          
+          // 현재 장비 확인 및 가장 높은 레벨 찾기
+          int currentLevel = 0;
+          if (userGameInfo != null && userGameInfo!.inventory.isNotEmpty) {
+            final inventory = userGameInfo!.inventory[0] as Map<String, dynamic>?;
+            if (inventory != null) {
+              if (itemType == 'ARMOR') {
+                // 장착된 갑옷 레벨 확인
+                final equippedArmor = inventory['equippedArmor'];
+                if (equippedArmor != null) {
+                  String armorId = equippedArmor['id'] ?? '';
+                  int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                  if (level != null && level > currentLevel) {
+                    currentLevel = level;
+                  }
+                }
+                // 인벤토리 배열의 갑옷들 확인
+                final armors = inventory['armors'];
+                if (armors is List) {
+                  for (var armor in armors) {
+                    if (armor is Map<String, dynamic>) {
+                      String armorId = (armor['itemId'] ?? armor['id'])?.toString() ?? '';
+                      int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                      if (level != null && level > currentLevel) {
+                        currentLevel = level;
+                      }
+                    }
+                  }
+                }
+              } else if (itemType == 'WEAPON') {
+                // 장착된 무기 레벨 확인
+                final equippedWeapon = inventory['equippedWeapon'];
+                if (equippedWeapon != null) {
+                  String weaponId = equippedWeapon['id'] ?? '';
+                  int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                  if (level != null && level > currentLevel) {
+                    currentLevel = level;
+                  }
+                }
+                // 인벤토리 배열의 무기들 확인
+                final weapons = inventory['weapons'];
+                if (weapons is List) {
+                  for (var weapon in weapons) {
+                    if (weapon is Map<String, dynamic>) {
+                      String weaponId = (weapon['itemId'] ?? weapon['id'])?.toString() ?? '';
+                      int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                      if (level != null && level > currentLevel) {
+                        currentLevel = level;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          String requiredItemName = '';
+          if (itemType == 'ARMOR') {
+            if (currentLevel == 0) {
+              requiredItemName = '가죽 갑옷';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 갑옷';
+            }
+          } else if (itemType == 'WEAPON') {
+            if (currentLevel == 0) {
+              requiredItemName = '나무 검';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 검';
+            }
+          }
+          
+          message = requiredItemName.isNotEmpty 
+            ? '$requiredItemName을(를) 먼저 구매해야 합니다.'
+            : '이전 업그레이드를 먼저 완료해야 합니다.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('골드가 부족합니다! (보유: ${_getCurrentGold()}, 필요: ${selectedItem!.price})'),
+            content: Text(message),
             backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -637,83 +1037,79 @@ class _ShopScreenState extends State<ShopScreen> {
     }
 
     if (mounted) {
-    setState(() {
-      isLoading = true;
-    });
+      setState(() {
+        isLoading = true;
+      });
     }
 
     try {
       print('=== 구매 처리 시작 ===');
       print('선택된 아이템: ${selectedItem?.name} (ID: ${selectedItem?.itemId})');
+
+      // 백엔드 API 호출 - Long 타입 userId 사용
+      if (currentUserDbId == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
       
-      // 백엔드 API 호출
-      final result = await purchaseItem(currentUserId!, selectedItem!.itemId);
-      
+      final result = await purchaseItem(currentUserDbId!, selectedItem!.itemId);
+
       print('구매 결과: $result');
+
+      // 구매 성공 - result.data에 playerGold와 purchasedItem이 포함됨
+      final purchaseData = result['data'] as Map<String, dynamic>?;
       
-      if (mounted) {
-      if (result['success']) {
-          // 구매 성공 메시지 표시
+      if (purchaseData != null && mounted) {
+        // 구매 전 골드 확인
+        final beforeGold = _getCurrentGold();
+        print('구매 전 골드: $beforeGold');
+        
+        // 구매 성공 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('구매 성공: ${result['message']}'),
+            content: Text('구매 성공: ${result['message'] ?? '구매가 완료되었습니다.'}'),
             backgroundColor: Colors.green,
           ),
         );
-          
-          // 선택된 아이템 정보를 미리 저장
-          print('선택된 아이템 정보 저장 시작');
-          print('selectedItem: $selectedItem');
-          print('selectedItem?.itemId: ${selectedItem?.itemId}');
-          print('selectedItem?.name: ${selectedItem?.name}');
-          
-          final purchasedItemId = selectedItem!.itemId;
-          final purchasedItemName = selectedItem!.name;
-          
-          print('저장된 아이템 정보: ID=$purchasedItemId, Name=$purchasedItemName');
-          
-          // 구매 후 사용자 정보 업데이트
-          print('사용자 정보 업데이트 호출 시작');
-          _updateUserAfterPurchase(purchasedItemId);
-          print('사용자 정보 업데이트 호출 완료');
-          
-          // 구매창 닫기
-          _hideBuyDialog();
-          
-          // 모든 아이템 구매 후 구매 완료 다이얼로그 표시
-          print('구매 완료 다이얼로그 표시 대기 중...');
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
-            print('구매 완료 다이얼로그 표시 시도');
+
+        // 구매 후 사용자 정보 다시 로드 (서버에서 업데이트된 골드와 장비 정보 반영)
+        await _loadUserGameInfo();
+
+        // 구매창 닫기
+        _hideBuyDialog();
+
+        // 구매 완료 다이얼로그 표시
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
           _showPurchaseCompleteDialog();
-            print('구매 완료 다이얼로그 호출 완료');
-          } else {
-            print('위젯이 mounted되지 않음');
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('구매 실패: ${result['message']}'),
-            backgroundColor: Colors.red,
-          ),
-        );
         }
       }
     } catch (e) {
       _hideBuyDialog();
       if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('구매 중 오류가 발생했습니다: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+        String errorMessage = '구매 중 오류가 발생했습니다.';
+        
+        if (e.toString().contains('로그인이 필요합니다')) {
+          errorMessage = '로그인이 필요합니다.';
+        } else if (e.toString().contains('Exception: ')) {
+          // 서버에서 반환한 에러 메시지 추출
+          final match = RegExp(r'Exception: (.+)').firstMatch(e.toString());
+          if (match != null) {
+            errorMessage = match.group(1)!;
+          }
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+        setState(() {
+          isLoading = false;
+        });
       }
     }
   }
@@ -758,56 +1154,55 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                       ),
                     ),
-                // Shop 제목과 골드 표시 (가운데)
-                Column(
-                  children: [
-                    Text(
-                      'Shop',
-                      style: TextStyle(
-                        fontSize: 48,  // 24 * 2
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                        fontFamily: 'DungGeunMo',
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // 골드 표시
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    // Shop 제목과 골드 표시 (가운데)
+                    Column(
                       children: [
-                        Image.asset(
-                          'assets/images/Icon_Gold.png',
-                          width: 24,
-                          height: 24,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          '${userEquipment?['inventory']?['gold'] ?? 0}',
+                          'Shop',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 55,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
                             fontFamily: 'DungGeunMo',
                             decoration: TextDecoration.none,
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        // 골드 표시
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/Icon_Gold.png',
+                              width: 40,
+                              height: 40,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${userGameInfo?.gold ?? 0}',
+                              style: TextStyle(
+                                fontSize: 35,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                fontFamily: 'DungGeunMo',
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
-                    ),
-                  ],
                     ),
                     // 오른쪽 공간 (대칭을 위해)
                     SizedBox(width: 48), // 홈 버튼과 같은 너비
                   ],
                 ),
-                const SizedBox(height: 40),
                 // 상점 아이템들
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final screenWidth = MediaQuery.of(context).size.width;
                       final isTablet = screenWidth > 600;
-                      
+
                       if (isTablet) {
                         // 태블릿: 동적 레이아웃
                         return Column(
@@ -910,8 +1305,6 @@ class _ShopScreenState extends State<ShopScreen> {
                     },
                   ),
                 ),
-                // 하단 Start 버튼
-                _buildBottomButtonSection(),
               ],
             ),
           ),
@@ -930,18 +1323,115 @@ class _ShopScreenState extends State<ShopScreen> {
     // 태블릿은 고정 크기, 스마트폰은 화면에 맞게 조절
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
-    
+
     final itemWidth = isTablet ? 240.0 : screenWidth * 0.4; // 스마트폰 크기 원복
     final itemHeight = isTablet ? 270.0 : itemWidth * 1.125; // 비율 유지
     final imageSize = isTablet ? 120.0 : itemWidth * 0.5; // 스마트폰 이미지 크기 원복
     final fontSize = isTablet ? 21.0 : 16.0; // 스마트폰 텍스트 크기 원복
     final priceFontSize = isTablet ? 24.0 : 18.0; // 스마트폰 가격 텍스트 크기 원복
-    
-    // 구매 가능 여부 확인
-    final canAfford = _canAffordItem(shopItem);
-    
+
+    // 구매 가능 여부 확인 (골드 + 업그레이드 순서)
+    final canPurchase = _canPurchaseItem(shopItem);
+
     return GestureDetector(
-      onTap: canAfford ? () => _showBuyDialog(shopItem) : null,
+      onTap: canPurchase ? () => _showBuyDialog(shopItem) : () {
+        // 클릭 가능하지만 구매 불가능한 경우 메시지 표시 (업그레이드 순서 위반)
+        if (!_canAffordItem(shopItem)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('골드가 부족합니다! (보유: ${_getCurrentGold()}, 필요: ${shopItem.price})'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          // 업그레이드 순서 위반
+          String itemType = shopItem.itemType;
+          if (itemType.isEmpty) {
+            itemType = EquipmentUpgrade.getItemType(shopItem.itemId) ?? '';
+          }
+          
+          // 현재 장비 확인 및 가장 높은 레벨 찾기
+          int currentLevel = 0;
+          if (userGameInfo != null && userGameInfo!.inventory.isNotEmpty) {
+            final inventory = userGameInfo!.inventory[0] as Map<String, dynamic>?;
+            if (inventory != null) {
+              if (itemType == 'ARMOR') {
+                // 장착된 갑옷 레벨 확인
+                final equippedArmor = inventory['equippedArmor'];
+                if (equippedArmor != null) {
+                  String armorId = equippedArmor['id'] ?? '';
+                  int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                  if (level != null && level > currentLevel) {
+                    currentLevel = level;
+                  }
+                }
+                // 인벤토리 배열의 갑옷들 확인
+                final armors = inventory['armors'];
+                if (armors is List) {
+                  for (var armor in armors) {
+                    if (armor is Map<String, dynamic>) {
+                      String armorId = (armor['itemId'] ?? armor['id'])?.toString() ?? '';
+                      int? level = EquipmentUpgrade.getItemLevel(armorId, 'ARMOR');
+                      if (level != null && level > currentLevel) {
+                        currentLevel = level;
+                      }
+                    }
+                  }
+                }
+              } else if (itemType == 'WEAPON') {
+                // 장착된 무기 레벨 확인
+                final equippedWeapon = inventory['equippedWeapon'];
+                if (equippedWeapon != null) {
+                  String weaponId = equippedWeapon['id'] ?? '';
+                  int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                  if (level != null && level > currentLevel) {
+                    currentLevel = level;
+                  }
+                }
+                // 인벤토리 배열의 무기들 확인
+                final weapons = inventory['weapons'];
+                if (weapons is List) {
+                  for (var weapon in weapons) {
+                    if (weapon is Map<String, dynamic>) {
+                      String weaponId = (weapon['itemId'] ?? weapon['id'])?.toString() ?? '';
+                      int? level = EquipmentUpgrade.getItemLevel(weaponId, 'WEAPON');
+                      if (level != null && level > currentLevel) {
+                        currentLevel = level;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          String requiredItemName = '';
+          if (itemType == 'ARMOR') {
+            if (currentLevel == 0) {
+              requiredItemName = '가죽 갑옷';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 갑옷';
+            }
+          } else if (itemType == 'WEAPON') {
+            if (currentLevel == 0) {
+              requiredItemName = '나무 검';
+            } else if (currentLevel == 1) {
+              requiredItemName = '은 검';
+            }
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(requiredItemName.isNotEmpty 
+                ? '$requiredItemName을(를) 먼저 구매해야 합니다.'
+                : '이전 업그레이드를 먼저 완료해야 합니다.'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
       child: Container(
         width: itemWidth,
         height: itemHeight,
@@ -961,7 +1451,7 @@ class _ShopScreenState extends State<ShopScreen> {
               right: 0,
               child: Center(
                 child: Opacity(
-                  opacity: canAfford ? 1.0 : 0.5,
+                  opacity: canPurchase ? 1.0 : 0.5,
                   child: Image.asset(
                     itemPath,
                     width: imageSize,
@@ -978,7 +1468,7 @@ class _ShopScreenState extends State<ShopScreen> {
               right: 0,
               child: Center(
                 child: Opacity(
-                  opacity: canAfford ? 1.0 : 0.5,
+                  opacity: canPurchase ? 1.0 : 0.5,
                   child: Text(
                     itemName,
                     style: TextStyle(
@@ -999,7 +1489,7 @@ class _ShopScreenState extends State<ShopScreen> {
               left: 0,
               right: 0,
               child: Opacity(
-                opacity: canAfford ? 1.0 : 0.5,
+                opacity: canPurchase ? 1.0 : 0.5,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1014,7 +1504,7 @@ class _ShopScreenState extends State<ShopScreen> {
                       style: TextStyle(
                         fontSize: priceFontSize,
                         fontWeight: FontWeight.bold,
-                        color: canAfford ? Colors.black : Colors.red,
+                        color: canPurchase ? Colors.black : Colors.red,
                         fontFamily: 'DungGeunMo',
                         decoration: TextDecoration.none,
                       ),
@@ -1024,40 +1514,6 @@ class _ShopScreenState extends State<ShopScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomButtonSection() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      child: Center(
-        child: GestureDetector(
-          onTap: () {
-            // Start 버튼 클릭 시 동작
-            print('Start button tapped');
-          },
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Image.asset(
-                'assets/images/MainButton.png',
-                width: 280,
-                height: 80,
-              ),
-              const Text(
-                'Start',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 24,
-                  fontFamily: 'DungGeunMo',
-                  fontWeight: FontWeight.bold,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1151,14 +1607,14 @@ class _ShopScreenState extends State<ShopScreen> {
                     children: [
                       Image.asset(
                         'assets/images/Icon_Gold.png',
-                        width: 27,  // 18 * 1.5
+                        width: 27,
                         height: 27,
                       ),
-                      const SizedBox(width: 9),  // 6 * 1.5
+                      const SizedBox(width: 9),
                       Text(
                         selectedItem!.price.toString(),
                         style: TextStyle(
-                          fontSize: 24,  // 16 * 1.5
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Colors.black,
                           fontFamily: 'DungGeunMo',
@@ -1170,7 +1626,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
                 // 구매 버튼
                 Positioned(
-                  bottom: 22,  // 15 * 1.5
+                  bottom: 22,
                   left: 0,
                   right: 0,
                   child: Center(
@@ -1181,30 +1637,30 @@ class _ShopScreenState extends State<ShopScreen> {
                         children: [
                           Image.asset(
                             'assets/images/StoreBuy_OK_Button.png',
-                            width: 105,  // 70 * 1.5
-                            height: 37,  // 25 * 1.5
+                            width: 105,
+                            height: 37,
                             fit: BoxFit.contain,
                             color: isLoading ? Colors.grey : null,
                           ),
                           isLoading
                               ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                  ),
-                                )
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                            ),
+                          )
                               : const Text(
-                                  'buy',
-                                  style: TextStyle(
-                                    fontSize: 18,  // 12 * 1.5
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                    fontFamily: 'DungGeunMo',
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
+                            'buy',
+                            style: TextStyle(
+                              fontSize: 18,  // 12 * 1.5
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                              fontFamily: 'DungGeunMo',
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
                         ],
                       ),
                     ),
