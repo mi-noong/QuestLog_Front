@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/api_config.dart';
+import 'main.dart';
 
 // 사용자 DB ID 가져오기 헬퍼 함수 (일정 생성 API용)
 Future<int?> getUserDbId() async {
@@ -117,33 +118,38 @@ class _QuestScreenState extends State<QuestScreen> {
 
   Future<void> _scheduleNotifications() async {
     if (_questDataList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('저장할 퀘스트가 없습니다.')),
-      );
       return;
     }
 
-    // 백엔드로 일정 데이터 전송 (백그라운드에서 실행)
+    // 유효한 일정 개수 확인
+    int validCount = 0;
+    for (int i = 0; i < _questDataList.length; i++) {
+      QuestData data = _questDataList[i];
+      if (data.startTime != null && data.endTime != null && data.title.isNotEmpty) {
+        validCount++;
+      }
+    }
+
+    if (validCount == 0) {
+      return;
+    }
+
+    // 백엔드로 일정 데이터 전송
     _sendDataToBackend().catchError((error) {
       print('❌ 백그라운드 일정 저장 오류: $error');
     });
 
-    // 모든 카드의 데이터를 저장하고 알림 설정 (백그라운드와 병행)
+    // 모든 카드의 알림 설정
     for (int i = 0; i < _questDataList.length; i++) {
       QuestData data = _questDataList[i];
       if (data.startTime != null && data.endTime != null && data.title.isNotEmpty) {
-        await _scheduleCardNotification(data, i);
+        try {
+          await _scheduleCardNotification(data, i);
+        } catch (e) {
+          print('❌ 카드 ${i + 1} 알림 설정 실패: $e');
+        }
       }
     }
-    
-    // 저장 시작 메시지 표시
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('일정을 저장하는 중...'),
-        duration: Duration(seconds: 1),
-        backgroundColor: Colors.blue,
-      ),
-    );
   }
 
 
@@ -173,28 +179,26 @@ class _QuestScreenState extends State<QuestScreen> {
       print('❌ 카드 ${cardIndex + 1} 백그라운드 서비스 실패: $e');
     }
     
-    // 백그라운드 서비스 성공 여부와 관계없이 Flutter 로컬 알림도 추가 설정
+    // Flutter 로컬 알림 설정 (메인 알림 방식)
     await _scheduleFlutterNotification(data, cardIndex);
-    
-    // 추가로 Timer 방식도 백업으로 설정
-    await _scheduleTimerNotification(data, cardIndex);
   }
 
   Future<void> _scheduleFlutterNotification(QuestData data, int cardIndex) async {
     try {
-      FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
+      // main.dart의 전역 인스턴스 사용
+      final FlutterLocalNotificationsPlugin _localNotification = flutterLocalNotificationsPlugin;
       
       // 알림 채널 생성
-    AndroidNotificationChannel channel = AndroidNotificationChannel(
+      AndroidNotificationChannel channel = AndroidNotificationChannel(
         'questlog_reminders_${cardIndex}',
         'QuestLog Reminders ${cardIndex + 1}',
         description: 'Notifications for quest ${data.title}',
-      importance: Importance.max,
-    );
+        importance: Importance.max,
+      );
 
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-        _localNotification.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(channel);
+      final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
+          _localNotification.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.createNotificationChannel(channel);
     
       // 시작 알림 스케줄링
       final DateTime now = DateTime.now();
@@ -206,8 +210,8 @@ class _QuestScreenState extends State<QuestScreen> {
         'questlog_reminders_${cardIndex}',
         'QuestLog Reminders ${cardIndex + 1}',
         channelDescription: 'Notifications for quest ${data.title}',
-      importance: Importance.max,
-      priority: Priority.max,
+        importance: Importance.max,
+        priority: Priority.max,
         enableVibration: true,
         playSound: true,
         showWhen: true,
@@ -250,36 +254,45 @@ class _QuestScreenState extends State<QuestScreen> {
       int endId = (cardIndex + 1) * 1000 + 2; // 더 고유한 ID
       
       print('📅 카드 ${cardIndex + 1} 알림 스케줄링:');
+      print('   제목: ${data.title}');
       print('   시작 ID: $startId, 시간: ${startDateTime.toString()}');
       print('   종료 ID: $endId, 시간: ${endDateTime.toString()}');
       
-      // 매일 반복이 아닌 특정 시간에 한 번만 실행
-      await _localNotification.zonedSchedule(
-        startId,
-        '${data.title} 시작 알림',
-        '${data.title}를(을) 시작 할 시간입니다!',
-        tz.TZDateTime.from(startDateTime, tz.local),
-        startDetails,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        androidAllowWhileIdle: true,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'start_${cardIndex}',
-        // matchDateTimeComponents 제거 - 한 번만 실행
-      );
+      // 시작 알림이 과거 시간이 아닌 경우에만 스케줄링
+      if (startDateTime.isAfter(DateTime.now())) {
+        await _localNotification.zonedSchedule(
+          startId,
+          '${data.title} 시작 알림',
+          '${data.title}를(을) 시작 할 시간입니다!',
+          tz.TZDateTime.from(startDateTime, tz.local),
+          startDetails,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          androidAllowWhileIdle: true,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'start_${cardIndex}',
+        );
+        print('✅ 시작 알림 스케줄링 완료');
+      } else {
+        print('⚠️ 시작 시간이 이미 지나서 알림을 설정하지 않습니다');
+      }
       
-      // 종료 알림 스케줄링
-      await _localNotification.zonedSchedule(
-        endId,
-        '${data.title} 종료 알림',
-        '${data.title}를(을) 완료 할 시간입니다!',
-        tz.TZDateTime.from(endDateTime, tz.local),
-        endDetails,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        androidAllowWhileIdle: true,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'end_${cardIndex}',
-        // matchDateTimeComponents 제거 - 한 번만 실행
-      );
+      // 종료 알림이 과거 시간이 아닌 경우에만 스케줄링
+      if (endDateTime.isAfter(DateTime.now())) {
+        await _localNotification.zonedSchedule(
+          endId,
+          '${data.title} 종료 알림',
+          '${data.title}를(을) 완료 할 시간입니다!',
+          tz.TZDateTime.from(endDateTime, tz.local),
+          endDetails,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          androidAllowWhileIdle: true,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'end_${cardIndex}',
+        );
+        print('✅ 종료 알림 스케줄링 완료');
+      } else {
+        print('⚠️ 종료 시간이 이미 지나서 알림을 설정하지 않습니다');
+      }
       
       print('✅ 카드 ${cardIndex + 1} Flutter 알림 스케줄링 성공');
       print('   시작 시간: ${_formatTimeOfDay(data.startTime)}');
@@ -310,80 +323,8 @@ class _QuestScreenState extends State<QuestScreen> {
     return '${twoDigits(timeOfDay.hour)}:${twoDigits(timeOfDay.minute)}';
   }
 
-  Future<void> _scheduleTimerNotification(QuestData data, int cardIndex) async {
-    try {
-    final DateTime now = DateTime.now();
-      final DateTime startDateTime = _getNextDateTime(data.startTime!, now);
-      final DateTime endDateTime = _getNextDateTime(data.endTime!, now);
-
-    // 시작 시간까지의 지연 시간 계산
-    final Duration startDelay = startDateTime.difference(now);
-    // 종료 시간까지의 지연 시간 계산
-    final Duration endDelay = endDateTime.difference(now);
-
-      print('⏰ 카드 ${cardIndex + 1} Timer 알림 설정:');
-      print('   시작 시간까지 남은 시간: ${startDelay.inMinutes}분');
-      print('   종료 시간까지 남은 시간: ${endDelay.inMinutes}분');
-
-    // 시작 알림 타이머 설정
-    if (startDelay.inMilliseconds > 0) {
-        Timer(startDelay, () async {
-          await _sendTimerNotification(
-            (cardIndex + 1) * 10000 + 1,
-            '${data.title} 시작 알림',
-            '${data.title}를(을) 시작 할 시간입니다!',
-        );
-      });
-    }
-
-    // 종료 알림 타이머 설정
-    if (endDelay.inMilliseconds > 0) {
-        Timer(endDelay, () async {
-          await _sendTimerNotification(
-            (cardIndex + 1) * 10000 + 2,
-            '${data.title} 종료 알림',
-            '${data.title}를(을) 완료 할 시간입니다!',
-        );
-      });
-    }
-
-      print('✅ 카드 ${cardIndex + 1} Timer 알림 설정 성공');
-    } catch (e) {
-      print('❌ 카드 ${cardIndex + 1} Timer 알림 설정 실패: $e');
-    }
-  }
-
-  Future<void> _sendTimerNotification(int id, String title, String body) async {
-    try {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'questlog_timer_reminders',
-        'QuestLog Timer Reminders',
-        channelDescription: 'Timer-based notifications for quest reminders',
-      importance: Importance.max,
-      priority: Priority.max,
-        enableVibration: true,
-        playSound: true,
-        showWhen: true,
-        fullScreenIntent: true,
-        category: AndroidNotificationCategory.alarm,
-        visibility: NotificationVisibility.public,
-        ongoing: false,
-        autoCancel: true,
-        channelShowBadge: true,
-        icon: '@mipmap/ic_launcher',
-        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-        styleInformation: const BigTextStyleInformation(''),
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-      await _localNotification.show(id, title, body, details);
-      print('✅ Timer 알림 발송 성공: $title');
-    } catch (e) {
-      print('❌ Timer 알림 발송 실패: $e');
-    }
-  }
+  // Timer 방식 알림 제거 (앱 종료 시 작동하지 않음)
+  // Flutter 로컬 알림만 사용
 
   // 백엔드 API 호출 함수들
   Future<void> _sendDataToBackend() async {
@@ -391,13 +332,6 @@ class _QuestScreenState extends State<QuestScreen> {
       // DB ID 가져오기
       final userDbId = await getUserDbId();
       if (userDbId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('로그인이 필요합니다. 로그인 후 다시 시도해주세요.'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.orange,
-          ),
-        );
         return;
       }
 
@@ -421,44 +355,13 @@ class _QuestScreenState extends State<QuestScreen> {
 
       if (successCount > 0) {
         print('✅ 백엔드 일정 생성 성공: $successCount개');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount개 일정이 저장되었습니다!'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
       
       if (failCount > 0) {
         print('❌ 백엔드 일정 생성 실패: $failCount개');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$failCount개 일정 저장에 실패했습니다.'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-
-      if (successCount == 0 && failCount == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('전송할 유효한 퀘스트가 없습니다. 제목과 시간을 입력해주세요.'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.orange,
-          ),
-        );
       }
     } catch (e) {
       print('❌ 백엔드 데이터 전송 중 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('백엔드 연결 오류: $e'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -664,23 +567,15 @@ class _QuestScreenState extends State<QuestScreen> {
                 }
                 
                 if (validQuests.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('완료된 일정이 없습니다.'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
                   return;
                 }
                 
                 // taskId가 없는 일정이 있으면 먼저 저장
                 final userDbId = await getUserDbId();
                 if (userDbId != null) {
-                  bool needToSave = false;
                   for (int i = 0; i < validQuests.length; i++) {
                     final questIndex = _questDataList.indexOf(validQuests[i]);
                     if (questIndex != -1 && _questDataList[questIndex].taskId == null) {
-                      needToSave = true;
                       print('📝 taskId가 없는 일정 발견, 저장 시작: ${validQuests[i].title}');
                       final taskId = await _createQuestInBackend(userDbId, validQuests[i]);
                       if (taskId != null) {
@@ -692,16 +587,12 @@ class _QuestScreenState extends State<QuestScreen> {
                       }
                     }
                   }
-                  
-                  if (needToSave) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('일정을 저장하는 중...'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  }
                 }
+                
+                // 알림 설정 (백그라운드에서 실행)
+                _scheduleNotifications().catchError((error) {
+                  print('❌ 알림 설정 오류: $error');
+                });
                 
                 // 일정 목록 생성 (taskId 포함)
                 final List<Map<String, dynamic>> questList = [];
@@ -828,8 +719,6 @@ class _QuestCardState extends State<QuestCard> {
   bool _isCategoryOpen = false;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
-  Timer? _startTimer;
-  Timer? _endTimer;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _memoController = TextEditingController();
   String _selectedCategory = 'category';
@@ -905,8 +794,6 @@ class _QuestCardState extends State<QuestCard> {
 
   @override
   void dispose() {
-    _startTimer?.cancel();
-    _endTimer?.cancel();
     _titleController.dispose();
     _memoController.dispose();
     super.dispose();
@@ -1148,140 +1035,6 @@ class _QuestCardState extends State<QuestCard> {
       ),
     )
     );
-  }
-
-
-  Future<void> _scheduleBackgroundNotifications() async {
-    try {
-      const platform = MethodChannel('questlog/notification_service');
-      
-      String title = _titleController.text.trim();
-      print('백그라운드 서비스 - 제목 텍스트: "$title"');
-      String startMessage = title.isNotEmpty 
-          ? '${title}를(을) 시작 할 시간입니다!'
-          : '퀘스트를 시작 할 시간입니다!';
-      String endMessage = title.isNotEmpty 
-          ? '${title}를(을) 완료 할 시간입니다!'
-          : '퀘스트를 완료 할 시간입니다!';
-      
-      print('백그라운드 서비스 - 시작 메시지: "$startMessage"');
-      print('백그라운드 서비스 - 종료 메시지: "$endMessage"');
-      
-      await platform.invokeMethod('startNotificationService', {
-        'startHour': _startTime!.hour,
-        'startMinute': _startTime!.minute,
-        'endHour': _endTime!.hour,
-        'endMinute': _endTime!.minute,
-        'startTimeText': _formatTimeOfDay(_startTime),
-        'endTimeText': _formatTimeOfDay(_endTime),
-        'title': title,
-        'startMessage': startMessage,
-        'endMessage': endMessage,
-      });
-
-      print('백그라운드 서비스 호출 성공');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('백그라운드 알림 설정 완료!\n시작: ${_formatTimeOfDay(_startTime)} | 종료: ${_formatTimeOfDay(_endTime)}\n앱을 종료해도 알림이 작동합니다!'),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    } catch (e) {
-      print('백그라운드 서비스 시작 실패: $e');
-      print('Timer 방식으로 폴백합니다');
-      // 백그라운드 서비스 실패 시 Timer 방식으로 폴백
-      await _scheduleTimerNotifications();
-    }
-  }
-
-  Future<void> _scheduleTimerNotifications() async {
-    print('Timer 방식으로 알림을 설정합니다');
-    final DateTime now = DateTime.now();
-    final DateTime startDateTime = _getNextDateTime(_startTime!, now);
-    final DateTime endDateTime = _getNextDateTime(_endTime!, now);
-
-    // 시작 시간까지의 지연 시간 계산
-    final Duration startDelay = startDateTime.difference(now);
-    // 종료 시간까지의 지연 시간 계산
-    final Duration endDelay = endDateTime.difference(now);
-
-    print('시작 시간까지 남은 시간: ${startDelay.inMinutes}분');
-    print('종료 시간까지 남은 시간: ${endDelay.inMinutes}분');
-
-    // 시작 알림 타이머 설정
-    if (startDelay.inMilliseconds > 0) {
-      _startTimer = Timer(startDelay, () async {
-        String title = _titleController.text.trim();
-        print('시작 알림 - 제목 텍스트: "$title"');
-        String notificationTitle = title.isNotEmpty 
-            ? '${title}를(을) 시작 할 시간입니다!'
-            : '퀘스트를 시작 할 시간입니다!';
-        String notificationMessage = title.isNotEmpty 
-            ? '${title}를(을) 시작 할 시간입니다!'
-            : '퀘스트를 시작 할 시간입니다!';
-        await _sendNotification(
-          1,
-          notificationTitle,
-          notificationMessage,
-        );
-      });
-    }
-
-    // 종료 알림 타이머 설정
-    if (endDelay.inMilliseconds > 0) {
-      _endTimer = Timer(endDelay, () async {
-        String title = _titleController.text.trim();
-        print('종료 알림 - 제목 텍스트: "$title"');
-        String notificationTitle = title.isNotEmpty 
-            ? '${title}를(을) 완료 할 시간입니다!'
-            : '퀘스트를 완료 할 시간입니다!';
-        String notificationMessage = title.isNotEmpty 
-            ? '${title}를(을) 완료 할 시간입니다!'
-            : '퀘스트를 완료 할 시간입니다!';
-        await _sendNotification(
-          2,
-          notificationTitle,
-          notificationMessage,
-        );
-      });
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Timer 알림 설정 완료!\n시작: ${_formatTimeOfDay(_startTime)} | 종료: ${_formatTimeOfDay(_endTime)}\n앱을 계속 실행해주세요.'),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  DateTime _getNextDateTime(TimeOfDay timeOfDay, DateTime now) {
-    DateTime scheduled = DateTime(now.year, now.month, now.day, timeOfDay.hour, timeOfDay.minute);
-    
-    if (!scheduled.isAfter(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
-    }
-    
-    return scheduled;
-  }
-
-  Future<void> _sendNotification(int id, String title, String body) async {
-    FlutterLocalNotificationsPlugin _localNotification = FlutterLocalNotificationsPlugin();
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'questlog_reminders',
-      'QuestLog Reminders',
-      channelDescription: 'Notifications for quest start and end times',
-      importance: Importance.max,
-      priority: Priority.max,
-    );
-    final NotificationDetails details = NotificationDetails(android: androidDetails);
-
-    try {
-      await _localNotification.show(id, title, body, details);
-      print('✅ 알림 발송 성공: $title');
-    } catch (e) {
-      print('❌ 알림 발송 실패: $e');
-    }
   }
 
 }
