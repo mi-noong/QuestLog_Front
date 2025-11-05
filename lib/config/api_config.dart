@@ -28,6 +28,7 @@ class ApiConfig {
   // 퀘스트/일정 API 엔드포인트
   static String createQuestEndpoint(int userId) => '$authBaseUrl/api/auth/quests?userId=$userId';
   static String completeQuestEndpoint(int taskId, int userId, bool isSuccess) => '$authBaseUrl/api/auth/quests/$taskId/complete?userId=$userId&isSuccess=$isSuccess';
+  static String updateQuestEndpoint(int taskId, int userId) => '$authBaseUrl/api/auth/quests/$taskId?userId=$userId';
   static String todayQuestsEndpoint(int userId) => '$authBaseUrl/api/auth/quests/today?userId=$userId';
   
   // 게임 API 엔드포인트
@@ -41,4 +42,3 @@ class ApiConfig {
   // 하루 리셋 체크 API
   static String dailyResetEndpoint(int userId) => '$gameBaseUrl/api/game/user/$userId/daily-reset';
 }
-
