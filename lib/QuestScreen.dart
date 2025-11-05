@@ -7,30 +7,24 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'config/api_config.dart';
 
-// 백엔드 설정 클래스
-class BackendConfig {
-  static const String baseUrl = 'http://192.168.219.110:8083';
-  
-  static String get questsEndpoint => '$baseUrl/api/auth/quests';
-  
-  // 로그인한 사용자 ID를 가져오는 함수
-  static Future<String> getUserId() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('userId');
-      
-      if (userId != null && userId.isNotEmpty) {
-        print('✅ 로그인한 사용자 ID: $userId');
-        return userId;
-      } else {
-        print('⚠️ 로그인한 사용자 ID가 없습니다. 기본값 사용');
-        return 'guest_user';
-      }
-    } catch (e) {
-      print('❌ 사용자 ID 가져오기 실패: $e');
-      return 'guest_user';
+// 사용자 DB ID 가져오기 헬퍼 함수 (일정 생성 API용)
+Future<int?> getUserDbId() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final userDbId = prefs.getInt('userDbId');
+    
+    if (userDbId != null) {
+      print('✅ 로그인한 사용자 DB ID: $userDbId');
+      return userDbId;
+    } else {
+      print('⚠️ 로그인한 사용자 DB ID가 없습니다.');
+      return null;
     }
+  } catch (e) {
+    print('❌ 사용자 DB ID 가져오기 실패: $e');
+    return null;
   }
 }
 
@@ -40,6 +34,7 @@ class QuestData {
   String category;
   TimeOfDay? startTime;
   TimeOfDay? endTime;
+  int? taskId; // 백엔드에서 받은 일정 ID
 
   QuestData({
     this.title = '',
@@ -47,6 +42,7 @@ class QuestData {
     this.category = 'category',
     this.startTime,
     this.endTime,
+    this.taskId,
   });
 }
 
@@ -127,18 +123,27 @@ class _QuestScreenState extends State<QuestScreen> {
       return;
     }
 
-    // TODO: 백엔드 엔드포인트가 준비되면 활성화
-    // await _sendDataToBackend();
+    // 백엔드로 일정 데이터 전송 (백그라운드에서 실행)
+    _sendDataToBackend().catchError((error) {
+      print('❌ 백그라운드 일정 저장 오류: $error');
+    });
 
-    // 모든 카드의 데이터를 저장하고 알림 설정
-    int successCount = 0;
+    // 모든 카드의 데이터를 저장하고 알림 설정 (백그라운드와 병행)
     for (int i = 0; i < _questDataList.length; i++) {
       QuestData data = _questDataList[i];
       if (data.startTime != null && data.endTime != null && data.title.isNotEmpty) {
         await _scheduleCardNotification(data, i);
-        successCount++;
       }
     }
+    
+    // 저장 시작 메시지 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('일정을 저장하는 중...'),
+        duration: Duration(seconds: 1),
+        backgroundColor: Colors.blue,
+      ),
+    );
   }
 
 
@@ -380,26 +385,15 @@ class _QuestScreenState extends State<QuestScreen> {
     }
   }
 
-  // TODO: 백엔드 엔드포인트가 준비되면 활성화
-  /*
   // 백엔드 API 호출 함수들
   Future<void> _sendDataToBackend() async {
     try {
-      // 유효한 데이터만 필터링
-      List<Map<String, dynamic>> validQuests = [];
-      
-      for (int i = 0; i < _questDataList.length; i++) {
-        QuestData data = _questDataList[i];
-        if (data.title.isNotEmpty && data.startTime != null && data.endTime != null) {
-          validQuests.add(_convertQuestDataToBackendFormat(data, i));
-        }
-      }
-
-      if (validQuests.isEmpty) {
-        print('⚠️ 백엔드로 전송할 유효한 퀘스트가 없습니다.');
+      // DB ID 가져오기
+      final userDbId = await getUserDbId();
+      if (userDbId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('전송할 유효한 퀘스트가 없습니다. 제목과 시간을 입력해주세요.'),
+            content: Text('로그인이 필요합니다. 로그인 후 다시 시도해주세요.'),
             duration: Duration(seconds: 2),
             backgroundColor: Colors.orange,
           ),
@@ -407,25 +401,52 @@ class _QuestScreenState extends State<QuestScreen> {
         return;
       }
 
-      // 백엔드 API 호출
-      final response = await _sendQuestsToBackend(validQuests);
+      // 유효한 데이터만 필터링하여 개별 일정으로 생성
+      int successCount = 0;
+      int failCount = 0;
       
-      if (response['success']) {
-        print('✅ 백엔드 데이터 전송 성공: ${validQuests.length}개 퀘스트');
+      for (int i = 0; i < _questDataList.length; i++) {
+        QuestData data = _questDataList[i];
+        if (data.title.isNotEmpty && data.startTime != null) {
+          final taskId = await _createQuestInBackend(userDbId, data);
+          if (taskId != null) {
+            // taskId를 QuestData에 저장
+            _questDataList[i].taskId = taskId;
+            successCount++;
+          } else {
+            failCount++;
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        print('✅ 백엔드 일정 생성 성공: $successCount개');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('백엔드에 ${validQuests.length}개 퀘스트가 저장되었습니다!'),
+            content: Text('$successCount개 일정이 저장되었습니다!'),
             duration: const Duration(seconds: 2),
             backgroundColor: Colors.green,
           ),
         );
-      } else {
-        print('❌ 백엔드 데이터 전송 실패: ${response['error']}');
+      }
+      
+      if (failCount > 0) {
+        print('❌ 백엔드 일정 생성 실패: $failCount개');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('백엔드 저장 실패: ${response['error']}'),
-            duration: const Duration(seconds: 3),
+            content: Text('$failCount개 일정 저장에 실패했습니다.'),
+            duration: const Duration(seconds: 2),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      if (successCount == 0 && failCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('전송할 유효한 퀘스트가 없습니다. 제목과 시간을 입력해주세요.'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.orange,
           ),
         );
       }
@@ -441,67 +462,62 @@ class _QuestScreenState extends State<QuestScreen> {
     }
   }
 
-  // 개별 카드 데이터를 백엔드로 전송하는 함수
-  Future<void> _sendSingleCardToBackend(QuestData data, int cardIndex) async {
-    try {
-      if (data.title.isEmpty || data.startTime == null || data.endTime == null) {
-        print('⚠️ 카드 ${cardIndex + 1}: 유효하지 않은 데이터로 백엔드 전송 불가');
-        return;
-      }
-
-      final questData = _convertQuestDataToBackendFormat(data, cardIndex);
-      final response = await _sendQuestsToBackend([questData]);
-      
-      if (response['success']) {
-        print('✅ 카드 ${cardIndex + 1} 백엔드 전송 성공');
-      } else {
-        print('❌ 카드 ${cardIndex + 1} 백엔드 전송 실패: ${response['error']}');
-      }
-    } catch (e) {
-      print('❌ 카드 ${cardIndex + 1} 백엔드 전송 중 오류: $e');
+  // 카테고리 매핑 함수 (소문자 -> 대문자)
+  String _mapCategoryToApiFormat(String category) {
+    switch (category.toLowerCase()) {
+      case 'study':
+        return 'STUDY';
+      case 'exercise':
+        return 'EXERCISE';
+      case 'work':
+        return 'WORK';
+      case 'hobby':
+        return 'HOBBY';
+      case 'social':
+        return 'SOCIAL';
+      case 'health':
+        return 'HEALTH';
+      case 'daily':
+        return 'DAILY';
+      default:
+        return 'DAILY'; // 기본값
     }
   }
-  */
 
-
-  // TODO: 백엔드 엔드포인트가 준비되면 활성화
-  /*
-  Map<String, dynamic> _convertQuestDataToBackendFormat(QuestData data, int cardIndex) {
-    return {
-      'cardIndex': cardIndex,
-      'title': data.title,
-      'memo': data.memo,
-      'category': data.category,
-      'startTime': {
-        'hour': data.startTime!.hour,
-        'minute': data.startTime!.minute,
-        'formatted': _formatTimeOfDay(data.startTime),
-      },
-      'endTime': {
-        'hour': data.endTime!.hour,
-        'minute': data.endTime!.minute,
-        'formatted': _formatTimeOfDay(data.endTime),
-      },
-      'createdAt': DateTime.now().toIso8601String(),
-    };
-  }
-
-  Future<Map<String, dynamic>> _sendQuestsToBackend(List<Map<String, dynamic>> quests) async {
+  // 개별 일정을 백엔드로 생성하는 함수 (taskId 반환)
+  Future<int?> _createQuestInBackend(int userDbId, QuestData data) async {
     try {
-      // 로그인한 사용자 ID 가져오기
-      final userId = await BackendConfig.getUserId();
+      if (data.title.isEmpty || data.startTime == null) {
+        print('⚠️ 유효하지 않은 데이터로 백엔드 전송 불가');
+        return null;
+      }
+
+      // 날짜 형식: YYYY-MM-DD
+      final dateStr = DateTime.now().toIso8601String().split('T')[0];
       
+      // 시간 형식: HH:mm (startTime 사용)
+      final timeStr = _formatTimeOfDay(data.startTime);
+
+      // Request Body 구성
+      final requestBody = {
+        'title': data.title,
+        'memo': data.memo.isNotEmpty ? data.memo : '',
+        'category': _mapCategoryToApiFormat(data.category),
+        'date': dateStr,
+        'time': timeStr,
+      };
+
+      print('📡 일정 생성 API 호출:');
+      print('   URL: ${ApiConfig.createQuestEndpoint(userDbId)}');
+      print('   Body: $requestBody');
+
       final response = await http.post(
-        Uri.parse(BackendConfig.questsEndpoint),
+        Uri.parse(ApiConfig.createQuestEndpoint(userDbId)),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: jsonEncode({
-          'quests': quests,
-          'userId': userId,
-          'date': DateTime.now().toIso8601String().split('T')[0], // YYYY-MM-DD 형식
-        }),
+        body: jsonEncode(requestBody),
       );
 
       print('📡 백엔드 응답 상태: ${response.statusCode}');
@@ -509,25 +525,31 @@ class _QuestScreenState extends State<QuestScreen> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = jsonDecode(response.body);
-        return {
-          'success': true,
-          'data': responseData,
-        };
+        if (responseData['success'] == true) {
+          // taskId 추출
+          final taskIdValue = responseData['data']?['taskId'];
+          final taskId = taskIdValue is int ? taskIdValue : (taskIdValue as num?)?.toInt();
+          
+          if (taskId != null) {
+            print('✅ 일정 생성 성공: ${data.title}, taskId=$taskId');
+            return taskId;
+          } else {
+            print('⚠️ 일정 생성 성공했으나 taskId를 찾을 수 없음: ${data.title}');
+            return null;
+          }
+        } else {
+          print('❌ 일정 생성 실패: ${responseData['message']}');
+          return null;
+        }
       } else {
-        return {
-          'success': false,
-          'error': 'HTTP ${response.statusCode}: ${response.body}',
-        };
+        print('❌ 일정 생성 실패: HTTP ${response.statusCode} - ${response.body}');
+        return null;
       }
     } catch (e) {
-      print('❌ 백엔드 API 호출 실패: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      print('❌ 일정 생성 API 호출 실패: $e');
+      return null;
     }
   }
-  */
 
   @override
   Widget build(BuildContext context) {
@@ -627,16 +649,89 @@ class _QuestScreenState extends State<QuestScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // OK 버튼 (첫 번째 카드에만 표시)
-          if (_currentIndex == 0) ...[
+          // Start 버튼 (현재 카드의 일정 정보로 전투 화면 이동)
+          if (_questDataList.isNotEmpty && _currentIndex < _questDataList.length) ...[
             GestureDetector(
               onTap: () async {
-                // 알림 설정 먼저 실행
-                await _scheduleNotifications();
-                // 그 다음 SettingScreen으로 이동
+                // 완료된 일정 목록 생성 (제목과 카테고리가 있는 일정만)
+                final List<QuestData> validQuests = [];
+                for (var questData in _questDataList) {
+                  if (questData.title.isNotEmpty && 
+                      questData.category.isNotEmpty && 
+                      questData.category != 'category') {
+                    validQuests.add(questData);
+                  }
+                }
+                
+                if (validQuests.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('완료된 일정이 없습니다.'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+                
+                // taskId가 없는 일정이 있으면 먼저 저장
+                final userDbId = await getUserDbId();
+                if (userDbId != null) {
+                  bool needToSave = false;
+                  for (int i = 0; i < validQuests.length; i++) {
+                    final questIndex = _questDataList.indexOf(validQuests[i]);
+                    if (questIndex != -1 && _questDataList[questIndex].taskId == null) {
+                      needToSave = true;
+                      print('📝 taskId가 없는 일정 발견, 저장 시작: ${validQuests[i].title}');
+                      final taskId = await _createQuestInBackend(userDbId, validQuests[i]);
+                      if (taskId != null) {
+                        _questDataList[questIndex].taskId = taskId;
+                        validQuests[i].taskId = taskId;
+                        print('✅ 일정 저장 완료: ${validQuests[i].title}, taskId=$taskId');
+                      } else {
+                        print('⚠️ 일정 저장 실패: ${validQuests[i].title}');
+                      }
+                    }
+                  }
+                  
+                  if (needToSave) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('일정을 저장하는 중...'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                }
+                
+                // 일정 목록 생성 (taskId 포함)
+                final List<Map<String, dynamic>> questList = [];
+                for (var questData in validQuests) {
+                  questList.add({
+                    'title': questData.title,
+                    'category': questData.category.toLowerCase(),
+                    'taskId': questData.taskId, // taskId 포함
+                  });
+                }
+                
+                print('📋 QuestScreen - 일정 목록 생성: ${questList.length}개');
+                for (int i = 0; i < questList.length; i++) {
+                  print('  [$i] ${questList[i]['title']} (${questList[i]['category']}), taskId=${questList[i]['taskId']}');
+                }
+                
+                // 항상 첫 번째 일정(인덱스 0)부터 시작
+                final firstQuest = questList[0];
+                print('📍 첫 번째 일정으로 시작: ${firstQuest['title']} (${firstQuest['category']}), taskId=${firstQuest['taskId']}');
+                
+                // SettingScreen으로 이동 (일정 정보 및 목록 전달)
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SettingScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => SettingScreen(
+                      questTitle: firstQuest['title']!,
+                      category: firstQuest['category']!,
+                      questList: questList, // 전체 일정 목록 전달 (입력 순서대로)
+                    ),
+                  ),
                 );
               },
               child: Stack(
