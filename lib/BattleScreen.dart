@@ -57,10 +57,16 @@ class _BattleScreenState extends State<BattleScreen> {
   late BattleGame game;
   bool battleStarted = false;
   bool showNextButton = false;
+  late String currentQuestTitle; // 현재 일정 제목 (수정 가능)
+  late String currentCategory; // 현재 카테고리 (수정 가능)
 
   @override
   void initState() {
     super.initState();
+    
+    // 현재 일정 제목 및 카테고리 초기화
+    currentQuestTitle = widget.params.questTitle;
+    currentCategory = widget.params.category;
     
     // 현재 일정의 taskId 찾기
     int? currentTaskId;
@@ -91,6 +97,16 @@ class _BattleScreenState extends State<BattleScreen> {
         // 보상 정보 저장 (나중에 사용)
         game._rewardExp = exp;
         game._rewardGold = gold;
+      },
+      onTitleChanged: (newTitle) {
+        setState(() {
+          currentQuestTitle = newTitle;
+        });
+      },
+      onCategoryChanged: (newCategory) {
+        setState(() {
+          currentCategory = newCategory;
+        });
       },
     );
   }
@@ -386,6 +402,319 @@ class _BattleScreenState extends State<BattleScreen> {
     }
   }
 
+  // 일정 수정 API 호출
+  Future<void> _updateQuest(String title, String category) async {
+    try {
+      final userDbId = await _getUserDbId();
+      if (userDbId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('로그인이 필요합니다.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      int? taskId = game.taskId;
+      
+      // taskId가 없으면 오늘의 일정에서 찾기
+      if (taskId == null) {
+        taskId = await _findTaskIdByTitleAndCategory(userDbId);
+      }
+
+      if (taskId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('일정을 찾을 수 없습니다.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // 카테고리 매핑 (소문자 -> 대문자)
+      String apiCategory = category.toUpperCase();
+
+      // 기존 일정 정보 조회 (시간 정보 가져오기)
+      String? existingTime;
+      try {
+        final questUrl = ApiConfig.todayQuestsEndpoint(userDbId);
+        final questResponse = await http.get(
+          Uri.parse(questUrl),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 10));
+        
+        if (questResponse.statusCode == 200) {
+          final questResult = jsonDecode(questResponse.body);
+          if (questResult['success'] == true && questResult['data'] != null) {
+            final tasks = questResult['data']['tasks'] as List<dynamic>?;
+            if (tasks != null) {
+              for (var task in tasks) {
+                if (task['taskId'] == taskId) {
+                  existingTime = task['time']?.toString() ?? '00:00';
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('⚠️ 기존 일정 시간 조회 실패: $e');
+      }
+      
+      // 시간이 없으면 기본값 사용
+      if (existingTime == null) {
+        existingTime = '00:00';
+      }
+
+      // 날짜 형식: YYYY-MM-DD (오늘 날짜)
+      final dateStr = DateTime.now().toIso8601String().split('T')[0];
+
+      // Request Body 구성
+      final requestBody = {
+        'title': title,
+        'memo': '', // 메모는 수정하지 않음
+        'category': apiCategory,
+        'date': dateStr,
+        'time': existingTime, // 기존 시간 유지
+      };
+
+      print('📡 일정 수정 API 호출:');
+      print('   URL: ${ApiConfig.updateQuestEndpoint(taskId, userDbId)}');
+      print('   Body: $requestBody');
+
+      final response = await http.put(
+        Uri.parse(ApiConfig.updateQuestEndpoint(taskId, userDbId)),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
+
+      print('📡 일정 수정 API 응답: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          // 화면 갱신
+          setState(() {
+            currentQuestTitle = title;
+            currentCategory = category;
+          });
+          
+          // 게임의 제목과 카테고리 업데이트
+          game.updateTitle(title);
+          game.updateCategory(category);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('일정이 수정되었습니다.'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('일정 수정 실패: ${result['message']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        // 400 오류 시 응답 본문의 상세 메시지 표시
+        String errorMessage = '일정 수정 실패: HTTP ${response.statusCode}';
+        try {
+          final errorBody = jsonDecode(response.body);
+          if (errorBody['message'] != null) {
+            errorMessage = '일정 수정 실패: ${errorBody['message']}';
+          } else if (errorBody['error'] != null) {
+            errorMessage = '일정 수정 실패: ${errorBody['error']}';
+          }
+        } catch (e) {
+          // JSON 파싱 실패 시 원본 메시지 사용
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ 일정 수정 API 호출 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('일정 수정 중 오류가 발생했습니다: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // 일정 수정 다이얼로그 표시
+  Future<void> _showEditQuestDialog() async {
+    final TextEditingController titleController = TextEditingController(text: currentQuestTitle);
+    String selectedCategory = currentCategory;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.transparent,
+          contentPadding: EdgeInsets.zero,
+          content: Container(
+            width: 500,
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+              image: const DecorationImage(
+                image: AssetImage('assets/images/Quest_Background.png'),
+                fit: BoxFit.fill,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '일정 수정',
+                  style: TextStyle(
+                    fontFamily: 'DungGeunMo',
+                    fontSize: 25,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // 제목 입력
+                SizedBox(
+                  width: 200,
+                  height: 100,
+                  child: Stack(
+                    children: [
+                      Image.asset(
+                        'assets/images/Quest_Input.png',
+                        width: 280,
+                        height: 80,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        filterQuality: FilterQuality.high,
+                      ),
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 38),
+                          child: TextField(
+                            controller: titleController,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              color: Colors.black,
+                              fontSize: 20,
+                            ),
+                            cursorColor: Colors.black,
+                            decoration: const InputDecoration(
+                              isCollapsed: true,
+                              border: InputBorder.none,
+                              hintText: '제목을 입력하세요',
+                              hintStyle: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // 카테고리 선택
+                CategoryDropdown(
+                  width: 150,
+                  selectedCategory: selectedCategory,
+                  onCategoryChanged: (category) {
+                    setDialogState(() {
+                      selectedCategory = category;
+                    });
+                  },
+                ),
+                const SizedBox(height: 20),
+                // 저장 버튼
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/MainButtonSquare.png',
+                            width: 70,
+                            height: 70,
+                          ),
+                          const Text(
+                            '취소',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              color: Colors.black,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    GestureDetector(
+                      onTap: () {
+                        if (titleController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('제목을 입력해주세요.'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+                        
+                        Navigator.pop(context);
+                        _updateQuest(titleController.text.trim(), selectedCategory);
+                      },
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/MainButton.png',
+                            width: 110,
+                            height: 70,
+                          ),
+                          const Text(
+                            '저장',
+                            style: TextStyle(
+                              fontFamily: 'DungGeunMo',
+                              color: Colors.black,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _handleNextQuest() {
     final questList = widget.params.questList;
     final currentIndex = widget.params.currentQuestIndex;
@@ -442,6 +771,30 @@ class _BattleScreenState extends State<BattleScreen> {
         child: Stack(
           children: [
             GameWidget<BattleGame>(game: game),
+            // 일정 수정 버튼 (왼쪽 아래, 전투 시작 전에만 표시)
+            if (!battleStarted)
+              Positioned(
+                bottom: 50,
+                left: 20,
+                child: GestureDetector(
+                  onTap: _showEditQuestDialog,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/images/MainButtonSquare.png',
+                        width: 60,
+                        height: 60,
+                      ),
+                      const Icon(
+                        Icons.edit,
+                        color: Colors.black,
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             // NEXT 버튼 (보상/실패 화면 후에 표시, Quest_Background.png 안에 위치)
             if (showNextButton)
               Positioned(
@@ -497,8 +850,8 @@ class _BattleScreenState extends State<BattleScreen> {
                       // 일정 완료 버튼
                       GestureDetector(
                         onTap: () async {
-                          // 카테고리별로 인증 화면으로 이동
-                          final normalizedCategory = widget.params.category.toLowerCase().trim();
+                          // 카테고리별로 인증 화면으로 이동 (수정된 카테고리 사용)
+                          final normalizedCategory = currentCategory.toLowerCase().trim();
                           Widget authScreen;
                           
                           switch (normalizedCategory) {
@@ -610,6 +963,8 @@ class BattleGame extends FlameGame {
   final VoidCallback? onNextButtonShow;
   final int? taskId; // 일정 ID (백엔드용)
   final Function(int exp, int gold)? onRewardReceived; // 보상 받았을 때 콜백
+  final Function(String)? onTitleChanged; // 제목 변경 시 콜백
+  final Function(String)? onCategoryChanged; // 카테고리 변경 시 콜백
 
   BattleGame({
     required this.questTitle,
@@ -619,7 +974,9 @@ class BattleGame extends FlameGame {
     this.onNextButtonShow,
     this.taskId,
     this.onRewardReceived,
-  });
+    this.onTitleChanged,
+    this.onCategoryChanged,
+  }) : _currentCategory = category;
 
   late Character character;
   late Monster monster;
@@ -630,6 +987,7 @@ class BattleGame extends FlameGame {
   int? _rewardExp;
   int? _rewardGold;
   bool _hasBonusReward = false; // 보너스 보상 여부
+  String _currentCategory; // 현재 카테고리 (수정 가능)
 
   void changeMonsterToCannon() {
     monster.changeToCannon();
@@ -714,25 +1072,24 @@ class BattleGame extends FlameGame {
     titleText.priority = 1; // 배경 이미지보다 높은 priority로 텍스트가 위에 표시
     add(titleText);
 
-    // 상태 텍스트 제거됨
-
-    // 캐릭터 생성
+    // 캐릭터 생성 및 추가
     character = Character(category: category);
     character.position = Vector2(size.x * 0.26, size.y / 1.67);
     character.anchor = Anchor.center;
     character.priority = 10; // 몬스터보다 높은 priority로 설정 (앞에 표시)
     add(character);
+    print('✅ 캐릭터 추가 완료');
 
-    // 몬스터 생성 (카테고리에 따라)
-    print('🎮 BattleGame 초기화 - 카테고리: "$category"');
-    monster = Monster(category: category);
+    // 몬스터 생성 및 추가
+    print('🎮 BattleGame 초기화 - 카테고리: "$_currentCategory"');
+    monster = Monster(category: _currentCategory);
     monster.position = Vector2(size.x * 0.76, size.y / 1.64);
     monster.anchor = Anchor.center;
     monster.priority = 1; // 캐릭터보다 낮은 priority로 설정 (뒤에 표시)
     
     // 죽음 애니메이션 크기와 위치 설정 (카테고리별로 다르게 설정)
-    final originalSize = _getMonsterSizeForDeath(category);
-    final normalizedCategory = category.toLowerCase().trim();
+    final originalSize = _getMonsterSizeForDeath(_currentCategory);
+    final normalizedCategory = _currentCategory.toLowerCase().trim();
     
     switch (normalizedCategory) {
       case 'work':
@@ -782,6 +1139,82 @@ class BattleGame extends FlameGame {
     }
     
     add(monster);
+    print('✅ 몬스터 추가 완료');
+  }
+
+  // 제목 업데이트 함수
+  void updateTitle(String newTitle) {
+    titleText.text = newTitle;
+    onTitleChanged?.call(newTitle);
+  }
+
+  // 카테고리 업데이트 함수 (몬스터 이미지 변경)
+  Future<void> updateCategory(String newCategory) async {
+    _currentCategory = newCategory;
+    onCategoryChanged?.call(newCategory);
+    
+    // 몬스터 이미지 변경
+    try {
+      // 기존 몬스터 제거
+      monster.removeFromParent();
+      
+      // 새 몬스터 생성
+      monster = Monster(category: newCategory);
+      monster.position = Vector2(size.x * 0.76, size.y / 1.64);
+      monster.anchor = Anchor.center;
+      monster.priority = 1;
+      
+      // 죽음 애니메이션 크기와 위치 설정
+      final originalSize = _getMonsterSizeForDeath(newCategory);
+      final normalizedCategory = newCategory.toLowerCase().trim();
+      
+      switch (normalizedCategory) {
+        case 'work':
+          monster.setDeathSize(originalSize.x * 1.0, originalSize.y * 1.0);
+          monster.setDeathPosition(size.x * 0.8, size.y * 0.6);
+          break;
+        case 'exercise':
+          monster.setDeathSize(originalSize.x * 1.0, originalSize.y * 1.0);
+          monster.setDeathPosition(size.x * 0.8, size.y * 0.6);
+          break;
+        case 'study':
+          monster.setDeathSize(originalSize.x * 0.8, originalSize.y * 0.8);
+          monster.setDeathPosition(size.x * 0.8, size.y * 0.6);
+          break;
+        default:
+          monster.setDeathSize(originalSize.x * 1.1, originalSize.y * 1.1);
+          monster.setDeathPosition(size.x * 0.8, size.y * 0.6);
+          break;
+      }
+      
+      // Cannon 이미지 크기와 위치 설정
+      switch (normalizedCategory) {
+        case 'work':
+          monster.setCannonSize(originalSize.x * 1.2, originalSize.y * 0.9);
+          monster.setCannonPosition(size.x * 0.71, size.y / 1.62);
+          break;
+        case 'exercise':
+          monster.setCannonSize(originalSize.x * 1.3, originalSize.y * 1.0);
+          monster.setCannonPosition(size.x * 0.71, size.y / 1.64);
+          break;
+        case 'study':
+          monster.setCannonSize(originalSize.x * 1.1, originalSize.y * 0.8);
+          monster.setCannonPosition(size.x * 0.73, size.y / 1.64);
+          break;
+        default:
+          monster.setCannonSize(originalSize.x * 1.1, originalSize.y * 0.8);
+          monster.setCannonPosition(size.x * 0.73, size.y / 1.64);
+          break;
+      }
+      
+      // 몬스터 로드 완료 대기
+      await monster.onLoad();
+      add(monster);
+      
+      print('✅ 몬스터 카테고리 변경 완료: $newCategory');
+    } catch (e) {
+      print('❌ 몬스터 카테고리 변경 실패: $e');
+    }
   }
 
   void startBattle() {
@@ -823,9 +1256,9 @@ class BattleGame extends FlameGame {
     monster.attack();
     await Future.delayed(const Duration(milliseconds: 500));
     
-    // 발사체 이미지 경로 결정
+    // 발사체 이미지 경로 결정 (수정된 카테고리 사용)
     String projectileImage = 'rpg/Cannon_Work.png';
-    switch (category.toLowerCase().trim()) {
+    switch (_currentCategory.toLowerCase().trim()) {
       case 'exercise':
         projectileImage = 'rpg/Cannon_Exercise.png';
         break;
@@ -1046,19 +1479,24 @@ class Character extends SpriteAnimationComponent with HasGameRef {
   Future<void> onLoad() async {
     await super.onLoad();
     
+    // 크기를 먼저 설정 (이미지 로드 전에)
+    size = Vector2(165, 165);
+    
     // 기본 상태 이미지 (Ch_Basic.png)
     try {
       final idleSprite = await gameRef.loadSprite('rpg/Ch_Basic.png');
       _idleAnimation = SpriteAnimation.spriteList([idleSprite], stepTime: 1.0);
       animation = _idleAnimation;
+      print('✅ 캐릭터 기본 이미지 로드 성공: rpg/Ch_Basic.png');
     } catch (e) {
       // 이미지가 없으면 기본 이미지로 대체
       try {
         final fallbackSprite = await gameRef.loadSprite('Female_Character.png');
         _idleAnimation = SpriteAnimation.spriteList([fallbackSprite], stepTime: 1.0);
         animation = _idleAnimation;
+        print('✅ 캐릭터 대체 이미지 로드 성공: Female_Character.png');
       } catch (e2) {
-        print('캐릭터 이미지를 찾을 수 없습니다: $e');
+        print('❌ 캐릭터 이미지를 찾을 수 없습니다: $e, $e2');
       }
     }
     
@@ -1070,8 +1508,6 @@ class Character extends SpriteAnimationComponent with HasGameRef {
     
     // 죽음 애니메이션 로드
     await _loadDiedAnimation();
-    
-    size = Vector2(165, 165);
   }
 
   Future<void> _loadWalkAnimation() async {
@@ -1287,21 +1723,27 @@ class Monster extends SpriteAnimationComponent with HasGameRef {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    
+    // 카테고리별로 다른 크기를 먼저 설정 (이미지 로드 전에)
+    size = _getMonsterSize(category);
+    
     // 카테고리에 따라 다른 몬스터 기본 이미지 사용
     String imagePath = _getMonsterImagePath(category);
+    print('🔍 몬스터 이미지 로드 시도: $imagePath');
     try {
       final idleSprite = await gameRef.loadSprite(imagePath);
       _idleAnimation = SpriteAnimation.spriteList([idleSprite], stepTime: 1.0);
       animation = _idleAnimation;
+      print('✅ 몬스터 이미지 로드 성공: $imagePath');
     } catch (e) {
       // 이미지가 없으면 기본 캐릭터 이미지로 대체
       try {
         final fallbackSprite = await gameRef.loadSprite('Female_Character.png');
         _idleAnimation = SpriteAnimation.spriteList([fallbackSprite], stepTime: 1.0);
         animation = _idleAnimation;
-        print('몬스터 이미지를 찾을 수 없어 기본 이미지 사용: $imagePath');
+        print('⚠️ 몬스터 이미지를 찾을 수 없어 기본 이미지 사용: $imagePath');
       } catch (e2) {
-        print('몬스터 이미지를 찾을 수 없습니다: $imagePath, $e');
+        print('❌ 몬스터 이미지를 찾을 수 없습니다: $imagePath, $e, $e2');
       }
     }
     
@@ -1313,9 +1755,6 @@ class Monster extends SpriteAnimationComponent with HasGameRef {
     
     // Cannon Shoot 공격 애니메이션 로드
     await _loadCannonShootAnimation();
-    
-    // 카테고리별로 다른 크기 설정
-    size = _getMonsterSize(category);
   }
 
   Future<void> _loadCannonAnimation() async {
@@ -1674,5 +2113,130 @@ class NextButton extends SpriteComponent with HasGameRef {
       return true;
     }
     return false;
+  }
+}
+
+// 카테고리 드롭다운 위젯
+class CategoryDropdown extends StatefulWidget {
+  final double width;
+  final String selectedCategory;
+  final ValueChanged<String>? onCategoryChanged;
+  
+  const CategoryDropdown({
+    super.key, 
+    required this.width, 
+    required this.selectedCategory,
+    this.onCategoryChanged,
+  });
+
+  @override
+  State<CategoryDropdown> createState() => _CategoryDropdownState();
+}
+
+class _CategoryDropdownState extends State<CategoryDropdown> {
+  bool _isOpen = false;
+  String _selected = 'category';
+
+  final List<String> _options = const ['study', 'exercise', 'work'];
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selectedCategory;
+  }
+
+  @override
+  void didUpdateWidget(CategoryDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedCategory != widget.selectedCategory) {
+      _selected = widget.selectedCategory;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isOpen = !_isOpen;
+            });
+          },
+          child: Container(
+            width: widget.width,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEC29C),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selected,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Icon(
+                  _isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.black,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isOpen)
+          Container(
+            width: widget.width,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEC29C),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: _options.map((opt) {
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selected = opt;
+                      _isOpen = false;
+                    });
+                    widget.onCategoryChanged?.call(opt);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(
+                      opt,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
   }
 }
