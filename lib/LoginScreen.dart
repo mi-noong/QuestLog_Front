@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'RegisterScreen.dart';
 import 'PasswordScreen.dart';
 import 'IdScreen.dart';
-// import 'HomeScreen.dart';
+import 'HomeScreen.dart';
+import 'config/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,15 +21,70 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _errorMessage;
   bool _isLoading = false;
 
+  // 로그인 응답 처리 및 사용자 정보 저장
+  Future<void> _handleLoginResponse(Map<String, dynamic> responseData) async {
+    if (responseData['success'] != true) {
+      return;
+    }
+
+    try {
+      final userData = responseData['data'];
+      
+      // data가 객체인지 확인
+      if (userData is! Map<String, dynamic>) {
+        print('⚠️ 로그인 응답 data가 객체가 아닙니다: $userData');
+        // data가 문자열인 경우 userId만 저장
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userId', _idController.text);
+        print('✅ 사용자 ID 저장 완료: ${_idController.text}');
+        return;
+      }
+
+      // ✅ 중요: DB ID (Long 타입)를 저장해야 합니다
+      final dbId = userData['id'] as int?;
+      final userId = userData['userId'] as String? ?? _idController.text;
+      final username = userData['username'] as String?;
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // DB ID 저장 (구매 API에 사용)
+      if (dbId != null) {
+        await prefs.setInt('userDbId', dbId);
+        print('✅ 사용자 DB ID 저장 완료: $dbId');
+      } else {
+        print('⚠️ 로그인 응답에 DB ID가 없습니다.');
+      }
+
+      // 사용자 ID (문자열) 저장 - 로그인용
+      await prefs.setString('userId', userId);
+      print('✅ 사용자 ID 저장 완료: $userId');
+
+      // 사용자명 저장 (선택적)
+      if (username != null) {
+        await prefs.setString('username', username);
+        print('✅ 사용자명 저장 완료: $username');
+      }
+    } catch (e) {
+      print('❌ 사용자 정보 저장 실패: $e');
+      // 저장 실패해도 기본 userId는 저장
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userId', _idController.text);
+      } catch (e2) {
+        print('❌ 기본 사용자 ID 저장도 실패: $e2');
+      }
+    }
+  }
+
+
   Future<void> _login() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-    final baseUrl = 'http://192.168.219.110:8083';
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
+        Uri.parse(ApiConfig.loginEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'userId': _idController.text,
@@ -35,11 +92,18 @@ class _LoginScreenState extends State<LoginScreen> {
         }),
       );
       if (response.statusCode == 200) {
-        // 로그인 성공 -> HomeScreen 이동
-        //Navigator.pushReplacement(
-        //  context,
-        //  MaterialPageRoute(builder: (context) => const HomeScreen()),
-        //);
+        // 로그인 응답에서 데이터 추출
+        final responseData = json.decode(response.body);
+        print('로그인 응답 데이터: $responseData');
+        
+        // 로그인 응답에서 사용자 정보 저장
+        await _handleLoginResponse(responseData);
+        
+        //로그인 성공 -> HomeScreen 이동
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
       } else {
         setState(() {
           _errorMessage = '아이디 또는 비밀번호가 맞지 않습니다.\n다시 시도해주시기 바랍니다.';
@@ -74,11 +138,18 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height - 
+                             MediaQuery.of(context).padding.top - 
+                             MediaQuery.of(context).padding.bottom - 40,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                 // 제목
                 const Text(
                   'Login',
@@ -101,13 +172,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  height: 70,
+                  height: 60,
                   decoration: BoxDecoration(
                     image: const DecorationImage(
                       image: AssetImage('assets/images/InputBar.png'),
                       fit: BoxFit.cover,
                     ),
-                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: TextField(
                     controller: _idController,
@@ -136,13 +206,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  height: 70,
+                  height: 60,
                   decoration: BoxDecoration(
                     image: const DecorationImage(
                       image: AssetImage('assets/images/InputBar.png'),
                       fit: BoxFit.cover,
                     ),
-                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: TextField(
                     controller: _passwordController,
@@ -277,7 +346,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
