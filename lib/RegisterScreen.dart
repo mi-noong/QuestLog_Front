@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'RegisterSuccessScreen.dart';
+import 'config/api_config.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -25,9 +26,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isUserIdChecking = false;
   String? _emailError;
   String? _userIdError;
-  
-  // API 기본 URL
-  static const String _baseUrl = 'http://192.168.219.110:8083/api/auth';
 
   // 이메일 중복 확인
   Future<void> _checkEmailDuplicate() async {
@@ -45,7 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/check-email?email=${_emailController.text}'),
+        Uri.parse(ApiConfig.checkEmailEndpoint(_emailController.text)),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -94,7 +92,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/check-userid?userId=${_idController.text}'),
+        Uri.parse(ApiConfig.checkUserIdEndpoint(_idController.text)),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -166,7 +164,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     try {
-      print('회원가입 요청 시작: $_baseUrl/signup');
+      print('회원가입 요청 시작: ${ApiConfig.registerEndpoint}');
       print('요청 데이터: ${json.encode({
         'username': _nameController.text,
         'email': _emailController.text,
@@ -176,7 +174,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       })}');
       
       final response = await http.post(
-        Uri.parse('$_baseUrl/signup'),
+        Uri.parse(ApiConfig.registerEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'username': _nameController.text,
@@ -352,13 +350,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 8),
         Container(
-          height: 70,
+          height: 60,
           decoration: BoxDecoration(
             image: const DecorationImage(
               image: AssetImage('assets/images/InputBar.png'),
               fit: BoxFit.cover,
             ),
-            borderRadius: BorderRadius.circular(8),
             border: isError ? Border.all(color: Colors.red, width: 2) : null,
           ),
           child: TextField(
@@ -400,13 +397,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 8),
         Container(
-          height: 70,
+          height: 60,
           decoration: BoxDecoration(
             image: const DecorationImage(
               image: AssetImage('assets/images/InputBar.png'),
               fit: BoxFit.cover,
             ),
-            borderRadius: BorderRadius.circular(8),
             border: error != null ? Border.all(color: Colors.red, width: 2) : null,
           ),
           child: Row(
