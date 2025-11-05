@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'WelcomeScreen.dart';
+import 'AuthenticationStudy.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter/rendering.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -51,6 +53,8 @@ Future<void> _requestAndroidNotificationPermissionIfNeeded() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPaintSizeEnabled = false;
+  debugPaintBaselinesEnabled = false;
   await _initNotifications();
   await _requestAndroidNotificationPermissionIfNeeded();
   runApp(const QuestLogApp());
