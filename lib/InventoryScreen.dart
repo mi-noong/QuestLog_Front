@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/api_config.dart';
 import 'models/user_game_info.dart';
+import 'services/sound_manager.dart';
 
 // 인벤토리 아이템 모델
 class InventoryItem {
@@ -168,6 +169,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<InventoryItem> ownedArmors = [];
   List<InventoryItem> ownedWeapons = [];
   List<InventoryItem> ownedPets = [];
+  List<InventoryItem> ownedPotions = [];
 
   @override
   void initState() {
@@ -229,6 +231,216 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
+  // 포션 사용 API 호출
+  Future<bool> _usePotion() async {
+    if (currentUserDbId == null) {
+      print('❌ 사용자 ID가 없습니다.');
+      return false;
+    }
+
+    try {
+      print('포션 사용 요청 시작: userId=$currentUserDbId');
+      final url = ApiConfig.usePotionEndpoint(currentUserDbId!);
+      print('포션 사용 URL: $url');
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      print('포션 사용 응답 상태: ${response.statusCode}');
+      print('포션 사용 응답 본문: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['success'] == true) {
+          print('✅ 포션 사용 성공');
+          return true;
+        } else {
+          print('❌ 포션 사용 실패: ${data['message']}');
+          return false;
+        }
+      } else {
+        print('❌ 포션 사용 실패: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ 포션 사용 오류: $e');
+      return false;
+    }
+  }
+
+  // 포션 사용 확인 다이얼로그
+  Future<void> _showPotionUseDialog(InventoryItem potionItem) async {
+    if (potionItem.quantity <= 0) {
+      // 포션이 없으면 다이얼로그 표시 안 함
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 400,
+            height: 200,
+            child: Stack(
+              children: [
+                // StoreItemFrame_row.png 배경
+                Image.asset(
+                  'assets/images/StoreItemFrame_row.png',
+                  width: 400,
+                  height: 200,
+                  fit: BoxFit.contain,
+                ),
+                // 내용
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '포션을 사용하시겠습니까?',
+                        style: TextStyle(
+                          fontFamily: 'DungGeunMo',
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          decoration: TextDecoration.none,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 30),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                            child: Text(
+                              '아니오',
+                              style: TextStyle(
+                                fontFamily: 'DungGeunMo',
+                                fontSize: 18,
+                                color: Colors.black,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                            child: Text(
+                              '예',
+                              style: TextStyle(
+                                fontFamily: 'DungGeunMo',
+                                fontSize: 18,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == true) {
+      // 예를 클릭한 경우
+      SoundManager().playClick();
+      final success = await _usePotion();
+      
+      if (success) {
+        // 포션 사용 성공 - 인벤토리 새로고침
+        await _loadUserInventory();
+        
+        // 성공 메시지 표시 (Quest_TimeInput.png 배경)
+        if (mounted) {
+          _showPotionSuccessDialog();
+        }
+      } else {
+        // 포션 사용 실패
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '포션 사용에 실패했습니다. 포션이 부족할 수 있습니다.',
+                style: TextStyle(
+                  fontFamily: 'DungGeunMo',
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              duration: Duration(seconds: 2),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // 포션 사용 성공 다이얼로그 (Quest_TimeInput.png 배경)
+  void _showPotionSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: GestureDetector(
+            onTap: () {
+              Navigator.of(context).pop();
+            },
+            child: Container(
+              width: 400,
+              height: 150,
+              child: Stack(
+                children: [
+                  // Quest_TimeInput.png 배경
+                  Image.asset(
+                    'assets/images/Quest_TimeInput.png',
+                    width: 400,
+                    height: 150,
+                    fit: BoxFit.contain,
+                  ),
+                  // 텍스트
+                  Center(
+                    child: Text(
+                      '체력이 30 회복되었습니다.',
+                      style: TextStyle(
+                        fontFamily: 'DungGeunMo',
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                        decoration: TextDecoration.none,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   void _processInventoryItems() {
     if (userInventory == null) return;
@@ -250,6 +462,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     ownedArmors.clear();
     ownedWeapons.clear();
     ownedPets.clear();
+    ownedPotions.clear();
 
     // 장착된 갑옷 ID 확인 (백엔드 구조에 따라 여러 형식 지원)
     // 형식 1: equippedArmor (새로운 백엔드 구조)
@@ -472,7 +685,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           final itemId = itemData.itemId;
           final itemType = itemData.itemType.toUpperCase();
 
-          // 갑옷, 무기, 펫을 3x3 그리드용 리스트에 추가
+          // 갑옷, 무기, 펫, 포션을 3x3 그리드용 리스트에 추가
           if (itemType == 'ARMOR') {
             if (!ownedArmors.any((a) => a.itemId == itemId)) {
               ownedArmors.add(itemData);
@@ -484,6 +697,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           } else if (itemType == 'PET') {
             if (!ownedPets.any((p) => p.itemId == itemId)) {
               ownedPets.add(itemData);
+            }
+          } else if (itemType == 'POTION') {
+            // 포션은 quantity가 0보다 큰 경우만 추가
+            if (itemData.quantity > 0 && !ownedPotions.any((p) => p.itemId == itemId)) {
+              ownedPotions.add(itemData);
             }
           }
 
@@ -575,14 +793,28 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
       // items 배열에 포션이 없으면 백엔드의 potions 필드로 추가
       if (!hasPotion) {
-        inventoryItems.add(InventoryItem(
+        final potionItem = InventoryItem(
           itemId: 'magic_potion',
           name: 'Magic Potion',
           description: '마법 포션',
           itemType: 'POTION',
           quantity: inventory['potions'] as int,
           stats: {'heal': 50},
-        ));
+        );
+        inventoryItems.add(potionItem);
+        // 3x3 그리드용 포션 리스트에도 추가
+        if (!ownedPotions.any((p) => p.itemId == 'magic_potion')) {
+          ownedPotions.add(potionItem);
+        }
+      }
+    }
+    
+    // inventoryItems에 있는 포션도 ownedPotions에 추가 (누락 방지)
+    for (var item in inventoryItems) {
+      if (item.itemType.toUpperCase() == 'POTION' && 
+          item.quantity > 0 && 
+          !ownedPotions.any((p) => p.itemId == item.itemId)) {
+        ownedPotions.add(item);
       }
     }
   }
@@ -614,7 +846,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   child: isLoading
                       ? Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
                       : _buildInventoryPanels(),
@@ -702,7 +934,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     
     final itemImages = {
       // 갑옷
-      'basic_clothes': 'assets/images/BasicClothes.png',
+      'starting_armor': 'assets/images/BasicClothes.png',
       'gold_armor': 'assets/images/GoldArmor.png',
       'silver_armor': 'assets/images/SilverArmor.png',
       'leather_armor': 'assets/images/Leather_Armor.png',
@@ -743,6 +975,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
         return 'assets/images/Pet_Cat.png'; // 기본 펫
       } else if (itemTypeUpper == 'ARMOR') {
         return 'assets/images/Leather_Armor.png'; // 기본 갑옷
+      } else if (itemTypeUpper == 'POTION') {
+        return 'assets/images/MagicPotion.png'; // 기본 포션
       }
       
       // 최종 기본값
@@ -760,6 +994,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     print('   갑옷: ${ownedArmors.map((a) => a.itemId).toList()}');
     print('   무기: ${ownedWeapons.map((w) => w.itemId).toList()}');
     print('   펫: ${ownedPets.map((p) => p.itemId).toList()}');
+    print('   포션: ${ownedPotions.map((p) => p.itemId).toList()}');
     
     List<Widget> items = [];
 
@@ -858,12 +1093,30 @@ class _InventoryScreenState extends State<InventoryScreen> {
       );
     }
 
-    // 3열: 펫 (오른쪽 세로줄) - 사용자가 소유한 펫들 (최대 3개)
-    for (int row = 0; row < 3 && row < ownedPets.length; row++) {
-      final pet = ownedPets[row];
+    // 3열: 포션과 펫 (오른쪽 세로줄) - 포션을 우선 표시하고, 포션이 없으면 펫 표시
+    // 포션과 펫을 합쳐서 최대 3개까지 표시
+    List<InventoryItem> thirdColumnItems = [];
+    
+    // 포션을 먼저 추가 (최대 3개)
+    for (int i = 0; i < ownedPotions.length && thirdColumnItems.length < 3; i++) {
+      thirdColumnItems.add(ownedPotions[i]);
+    }
+    
+    // 포션이 3개 미만이면 펫 추가
+    for (int i = 0; i < ownedPets.length && thirdColumnItems.length < 3; i++) {
+      thirdColumnItems.add(ownedPets[i]);
+    }
+    
+    // 3열 아이템 배치
+    for (int row = 0; row < 3 && row < thirdColumnItems.length; row++) {
+      final item = thirdColumnItems[row];
       final cellCenterX = gridStartX + cellWidth * 2.5; // 세 번째 열 중심
       final cellCenterY = gridStartY + cellHeight * (row + 0.5); // 각 행의 중심
       final offsetY = row == 2 ? bottomRowOffset : 0.0; // 맨 밑줄만 오프셋 적용
+      
+      // 아이템 타입에 따라 이미지 경로 결정
+      final itemType = item.itemType.toUpperCase();
+      final imagePath = _getItemImagePath(item.itemId, itemType);
 
       items.add(
         Positioned(
@@ -871,29 +1124,65 @@ class _InventoryScreenState extends State<InventoryScreen> {
           top: cellCenterY - itemHalfSize + offsetY,
           width: itemSize,
           height: itemSize,
-          child: Image.asset(
-            _getItemImagePath(pet.itemId, 'PET'),
-            width: itemSize,
-            height: itemSize,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              // 이미지 로드 실패 시 디버깅 정보와 함께 빈 컨테이너
-              print('❌ 펫 이미지 로드 실패: itemId=${pet.itemId}, 경로=${_getItemImagePath(pet.itemId, "PET")}, 오류: $error');
-              return Container(
-                width: itemSize,
-                height: itemSize,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
-                  border: Border.all(color: Colors.red, width: 2),
-                ),
-                child: Center(
-                  child: Text(
-                    pet.itemId.length > 8 ? '${pet.itemId.substring(0, 8)}...' : pet.itemId,
-                    style: TextStyle(fontSize: 8, color: Colors.red),
-                  ),
-                ),
-              );
+          child: GestureDetector(
+            onTap: () {
+              SoundManager().playClick();
+              // 포션인 경우 사용 다이얼로그 표시
+              if (itemType == 'POTION') {
+                _showPotionUseDialog(item);
+              }
             },
+            child: Stack(
+              children: [
+                Image.asset(
+                  imagePath,
+                  width: itemSize,
+                  height: itemSize,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    // 이미지 로드 실패 시 디버깅 정보와 함께 빈 컨테이너
+                    print('❌ 3열 아이템 이미지 로드 실패: itemId=${item.itemId}, 타입=$itemType, 경로=$imagePath, 오류: $error');
+                    return Container(
+                      width: itemSize,
+                      height: itemSize,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        border: Border.all(color: Colors.red, width: 2),
+                      ),
+                      child: Center(
+                        child: Text(
+                          item.itemId.length > 8 ? '${item.itemId.substring(0, 8)}...' : item.itemId,
+                          style: TextStyle(fontSize: 8, color: Colors.red),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // 포션의 경우 수량 표시 (1개 이상일 때, 1개도 표시)
+                if (itemType == 'POTION' && item.quantity >= 1)
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${item.quantity}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontFamily: 'DungGeunMo',
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );
@@ -911,6 +1200,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           padding: const EdgeInsets.only(left: 8),
           child: GestureDetector(
             onTap: () {
+              SoundManager().playClick();
               Navigator.pop(context);
             },
             child: Image.asset(
@@ -1197,57 +1487,66 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final isPotion = item.itemType.toUpperCase() == 'POTION';
     final itemSize = (isPotion) ? 40.0 : 45.0;
 
-    return Container(
-      width: 65,
-      height: 65,
-      decoration: BoxDecoration(),
-      clipBehavior: Clip.hardEdge,
-      child: Stack(
-        children: [
-          // 아이템 이미지와 수량 배지를 그룹화하여 오른쪽으로 이동
-          Positioned(
-            left: isArmor ? 5 : 7,
-            top: 0,
-            right: 0,
-            bottom: 0,
-            child: Stack(
-              children: [
-                // 아이템 이미지 (정중앙)
-                Center(
-                  child: Image.asset(
-                    _getItemImagePath(item.itemId, item.itemType),
-                    width: itemSize,
-                    height: itemSize,
-                    fit: BoxFit.contain,
+    return GestureDetector(
+      onTap: () {
+        SoundManager().playClick();
+        // 포션인 경우 사용 다이얼로그 표시
+        if (isPotion) {
+          _showPotionUseDialog(item);
+        }
+      },
+      child: Container(
+        width: 65,
+        height: 65,
+        decoration: BoxDecoration(),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          children: [
+            // 아이템 이미지와 수량 배지를 그룹화하여 오른쪽으로 이동
+            Positioned(
+              left: isArmor ? 5 : 7,
+              top: 0,
+              right: 0,
+              bottom: 0,
+              child: Stack(
+                children: [
+                  // 아이템 이미지 (정중앙)
+                  Center(
+                    child: Image.asset(
+                      _getItemImagePath(item.itemId, item.itemType),
+                      width: itemSize,
+                      height: itemSize,
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                ),
-                // 수량 표시 (1개 이상일 때만)
-                if (item.quantity > 1)
-                  Positioned(
-                    bottom: 5,
-                    right: 5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${item.quantity}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.white,
-                          fontFamily: 'DungGeunMo',
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.none,
+                  // 수량 표시 (1개 이상일 때, 포션은 1개도 표시)
+                  if (item.quantity >= 1 && (isPotion || item.quantity > 1))
+                    Positioned(
+                      bottom: 5,
+                      right: 5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${item.quantity}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontFamily: 'DungGeunMo',
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1372,6 +1671,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget _buildInventoryItem(InventoryItem item) {
     return GestureDetector(
       onTap: () {
+        SoundManager().playClick();
         // 아이템 클릭 시 상세 정보 표시 (추후 구현)
         print('아이템 클릭: ${item.name}');
       },
