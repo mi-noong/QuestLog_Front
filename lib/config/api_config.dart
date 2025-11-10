@@ -3,7 +3,7 @@ class ApiConfig {
   // 서버 기본 IP 주소
   // 개발 환경에 맞게 IP 주소를 변경하세요
   //에뮬레이터: 10.0.2.2
-  static const String serverIp = '10.0.2.2';
+  static const String serverIp = '192.168.219.102';
   
   // 인증 서버 포트 (로그인, 회원가입, 퀘스트 등)
   static const int authPort = 8084;
@@ -41,4 +41,6 @@ class ApiConfig {
   static String shopBuyEndpoint(int userId, String itemId) => '$gameBaseUrl/api/game/shop/buy?userId=$userId&itemId=$itemId';
   // 하루 리셋 체크 API
   static String dailyResetEndpoint(int userId) => '$gameBaseUrl/api/game/user/$userId/daily-reset';
+  // 포션 사용 API
+  static String usePotionEndpoint(int userId) => '$gameBaseUrl/api/game/user/$userId/use-potion';
 }
