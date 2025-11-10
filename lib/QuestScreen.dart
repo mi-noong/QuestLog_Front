@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/api_config.dart';
 import 'main.dart';
+import 'services/sound_manager.dart';
 
 // 사용자 DB ID 가져오기 헬퍼 함수 (일정 생성 API용)
 Future<int?> getUserDbId() async {
@@ -651,6 +652,7 @@ class _QuestScreenState extends State<QuestScreen> {
           // 새 카드 추가 버튼
           GestureDetector(
             onTap: () {
+              SoundManager().playClick();
               _addNewCardAndMoveToLast();
             },
             child: Stack(
@@ -678,6 +680,7 @@ class _QuestScreenState extends State<QuestScreen> {
           // 삭제 버튼
           GestureDetector(
             onTap: () {
+              SoundManager().playClick();
               _removeCurrentCard();
             },
             child: Stack(
@@ -1084,6 +1087,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
       children: [
         GestureDetector(
           onTap: () {
+            SoundManager().playClick();
             setState(() {
               _isOpen = !_isOpen;
             });
@@ -1141,6 +1145,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
               children: _options.map((opt) {
                 return InkWell(
                   onTap: () {
+                    SoundManager().playClick();
                     setState(() {
                       _selected = opt;
                       _isOpen = false;
