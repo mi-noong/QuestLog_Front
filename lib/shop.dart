@@ -6,6 +6,7 @@ import 'HomeScreen.dart';
 import 'config/api_config.dart';
 import 'models/user_game_info.dart';
 import 'services/game_service.dart';
+import 'services/sound_manager.dart';
 
 // 상점 아이템 모델
 class ShopItem {
@@ -31,7 +32,8 @@ class ShopItem {
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       price: json['price'] ?? 0,
-      itemType: json['itemType'] ?? '',
+      // 서버는 'type' 필드를 사용하지만 클라이언트는 'itemType'을 사용
+      itemType: (json['itemType'] ?? json['type'] ?? '').toUpperCase(),
       stats: json['stats'],
     );
   }
@@ -397,6 +399,7 @@ class _ShopScreenState extends State<ShopScreen> {
   UserGameInfo? userGameInfo; // HomeScreen과 동일한 방식
   ShopItem? currentArmorItem;
   ShopItem? currentWeaponItem;
+  ShopItem? currentPotionItem;
 
   void _showBuyDialog(ShopItem item) {
     // 구매 가능 여부 확인 (골드 + 업그레이드 순서)
@@ -562,10 +565,20 @@ class _ShopScreenState extends State<ShopScreen> {
     // 현재 갑옷과 무기가 없는 상태에서 첫 번째 업그레이드 아이템들 설정
     currentArmorItem = EquipmentUpgrade.getNextArmorUpgrade(null);
     currentWeaponItem = EquipmentUpgrade.getNextWeaponUpgrade(null);
+    
+    // 포션 아이템 기본값 설정 (서버에서 로드되면 업데이트됨)
+    currentPotionItem = ShopItem(
+      itemId: 'magic_potion',
+      name: 'Potion',
+      description: '마법 포션',
+      price: 40,
+      itemType: 'POTION',
+    );
 
     print('초기 상점 아이템 설정:');
     print('갑옷: ${currentArmorItem?.name ?? "없음"}');
     print('무기: ${currentWeaponItem?.name ?? "없음"}');
+    print('포션: ${currentPotionItem?.name ?? "없음"}');
   }
 
   Future<void> _loadCurrentUser() async {
@@ -648,8 +661,14 @@ class _ShopScreenState extends State<ShopScreen> {
       setState(() {
         userGameInfo = info;
         isLoading = false;
-        _updateShopItems();
       });
+      
+      // 상점 아이템 업데이트 (갑옷, 무기)
+      _updateShopItems();
+      
+      // 서버에서 포션 아이템 가져오기
+      await _loadPotionItem();
+      
       print('✅ 사용자 게임 정보 로드 완료');
     } catch (e) {
       print('❌ 사용자 게임 정보 로드 오류: $e');
@@ -818,7 +837,59 @@ class _ShopScreenState extends State<ShopScreen> {
     print('업데이트된 상점 아이템:');
     print('갑옷: ${currentArmorItem?.name ?? "없음"} (가격: ${currentArmorItem?.price ?? "N/A"})');
     print('무기: ${currentWeaponItem?.name ?? "없음"} (가격: ${currentWeaponItem?.price ?? "N/A"})');
+    print('포션: ${currentPotionItem?.name ?? "없음"} (가격: ${currentPotionItem?.price ?? "N/A"})');
     print('=== 상점 아이템 업데이트 완료 ===');
+  }
+
+  // 서버에서 포션 아이템 가져오기
+  Future<void> _loadPotionItem() async {
+    try {
+      // 서버에서 POTION 타입 아이템 가져오기
+      final potionItems = await fetchShopItemsByType('POTION');
+      
+      if (potionItems != null && potionItems.isNotEmpty) {
+        // magic_potion 아이템 찾기
+        final magicPotion = potionItems.firstWhere(
+          (item) => item.itemId == 'magic_potion',
+          orElse: () => potionItems.first, // magic_potion이 없으면 첫 번째 포션 사용
+        );
+        
+        if (mounted) {
+          setState(() {
+            currentPotionItem = magicPotion;
+          });
+        }
+        print('✅ 포션 아이템 로드 완료: ${magicPotion.name} (가격: ${magicPotion.price})');
+      } else {
+        // 서버에서 포션을 가져올 수 없으면 기본값 사용
+        if (mounted) {
+          setState(() {
+            currentPotionItem = ShopItem(
+              itemId: 'magic_potion',
+              name: 'Potion',
+              description: '마법 포션',
+              price: 40,
+              itemType: 'POTION',
+            );
+          });
+        }
+        print('⚠️ 서버에서 포션 아이템을 가져올 수 없어 기본값 사용');
+      }
+    } catch (e) {
+      print('❌ 포션 아이템 로드 오류: $e');
+      // 오류 발생 시 기본값 사용
+      if (mounted) {
+        setState(() {
+          currentPotionItem = ShopItem(
+            itemId: 'magic_potion',
+            name: 'Potion',
+            description: '마법 포션',
+            price: 40,
+            itemType: 'POTION',
+          );
+        });
+      }
+    }
   }
 
   // 현재 보유 골드 확인 (HomeScreen과 동일한 방식)
@@ -840,7 +911,7 @@ class _ShopScreenState extends State<ShopScreen> {
     }
 
     // 2. 업그레이드 순서 체크
-    String itemType = item.itemType;
+    String itemType = item.itemType.toUpperCase();
     if (itemType.isEmpty) {
       // itemType이 비어있으면 ID로 타입 확인 시도
       itemType = EquipmentUpgrade.getItemType(item.itemId) ?? '';
@@ -848,6 +919,12 @@ class _ShopScreenState extends State<ShopScreen> {
         print('⚠️ 알 수 없는 아이템 타입: ${item.itemId}');
         return true; // 타입을 알 수 없으면 구매 허용 (기타 아이템)
       }
+    }
+
+    // POTION 타입은 레벨 체크 없이 구매 가능
+    if (itemType == 'POTION') {
+      print('✅ 포션 구매 가능: 골드 체크 통과');
+      return true;
     }
 
     // 현재 장비 확인 및 가장 높은 레벨 찾기
@@ -908,8 +985,12 @@ class _ShopScreenState extends State<ShopScreen> {
     // 아이템 레벨 확인
     int? itemLevel = EquipmentUpgrade.getItemLevel(item.itemId, itemType);
     if (itemLevel == null) {
-      print('⚠️ 아이템 레벨을 확인할 수 없음: ${item.itemId}');
-      return true; // 레벨을 알 수 없으면 구매 허용 (기타 아이템)
+      // POTION 타입이 아닌 경우에만 경고 로그 출력
+      if (itemType != 'POTION') {
+        print('⚠️ 아이템 레벨을 확인할 수 없음: ${item.itemId} (타입: $itemType)');
+      }
+      // 레벨이 없는 아이템(POTION 등)은 구매 허용
+      return true;
     }
 
     // 업그레이드 순서 확인: 다음 레벨 아이템만 구매 가능
@@ -1141,6 +1222,7 @@ class _ShopScreenState extends State<ShopScreen> {
                       padding: const EdgeInsets.only(left: 8),
                       child: GestureDetector(
                         onTap: () {
+                          SoundManager().playClick();
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -1235,19 +1317,14 @@ class _ShopScreenState extends State<ShopScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                _buildShopItem(
-                                  'assets/images/StoreItemFrame.png',
-                                  'assets/images/MagicPotion.png',
-                                  'Potion',
-                                  40,
-                                  ShopItem(
-                                    itemId: 'magic_potion',
-                                    name: 'Potion',
-                                    description: '마법 포션',
-                                    price: 40,
-                                    itemType: 'POTION',
+                                if (currentPotionItem != null)
+                                  _buildShopItem(
+                                    'assets/images/StoreItemFrame.png',
+                                    'assets/images/MagicPotion.png',
+                                    currentPotionItem!.name,
+                                    currentPotionItem!.price,
+                                    currentPotionItem!,
                                   ),
-                                ),
                               ],
                             ),
                           ],
@@ -1284,19 +1361,14 @@ class _ShopScreenState extends State<ShopScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                _buildShopItem(
-                                  'assets/images/StoreItemFrame.png',
-                                  'assets/images/MagicPotion.png',
-                                  'Potion',
-                                  40,
-                                  ShopItem(
-                                    itemId: 'magic_potion',
-                                    name: 'Potion',
-                                    description: '마법 포션',
-                                    price: 40,
-                                    itemType: 'POTION',
+                                if (currentPotionItem != null)
+                                  _buildShopItem(
+                                    'assets/images/StoreItemFrame.png',
+                                    'assets/images/MagicPotion.png',
+                                    currentPotionItem!.name,
+                                    currentPotionItem!.price,
+                                    currentPotionItem!,
                                   ),
-                                ),
                               ],
                             ),
                           ],
@@ -1571,7 +1643,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   right: 0,
                   child: Center(
                     child: Image.asset(
-                      _getItemImagePath(selectedItem!.itemId),
+                      _getItemImagePath(selectedItem!.itemId, selectedItem!.itemType),
                       width: 75,  // 50 * 1.5
                       height: 75,
                       fit: BoxFit.contain,
@@ -1750,11 +1822,12 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  String _getItemImagePath(String itemId) {
-    // EquipmentUpgrade 클래스의 getImagePath 사용
-    if (itemId == 'magic_potion') {
+  String _getItemImagePath(String itemId, String itemType) {
+    // POTION 타입이면 MagicPotion.png 반환
+    if (itemType.toUpperCase() == 'POTION' || itemId == 'magic_potion') {
       return 'assets/images/MagicPotion.png';
     }
+    // EquipmentUpgrade 클래스의 getImagePath 사용
     return EquipmentUpgrade.getImagePath(itemId);
   }
 }
