@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'QuestScreen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'config/api_config.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -27,7 +27,7 @@ class Schedule {
   factory Schedule.fromJson(Map<String, dynamic> json) {
     final status = json['status']?.toString().toUpperCase() ?? '';
     final isCompleted = status == 'DONE';
-    
+
     return Schedule(
       id: json['id']?.toString() ?? json['taskId']?.toString() ?? '',
       title: json['title'] ?? '',
@@ -37,12 +37,15 @@ class Schedule {
 }
 
 // 날짜별 일정 조회 API
-Future<List<Schedule>> fetchSchedulesByDate(String userId, DateTime date) async {
+Future<List<Schedule>> fetchSchedulesByDate(int userDbId, DateTime date) async {
   try {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final response = await http.get(
-      Uri.parse('http://192.168.219.110:8083/api/auth/quests/date?userId=$userId&date=$dateStr'),
-      headers: {'Content-Type': 'application/json'},
+      Uri.parse(ApiConfig.questsByDateEndpoint(userDbId, dateStr)),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
     ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -50,7 +53,7 @@ Future<List<Schedule>> fetchSchedulesByDate(String userId, DateTime date) async 
       if (data['success'] == true && data['data'] != null) {
         // 백엔드에서 data['data']는 직접 List<TaskResponse>를 반환
         final responseData = data['data'];
-        
+
         // responseData가 리스트인지 확인
         if (responseData is List) {
           return responseData.map((task) => Schedule.fromJson(task)).toList();
@@ -64,20 +67,21 @@ Future<List<Schedule>> fetchSchedulesByDate(String userId, DateTime date) async 
   }
 }
 
-// 사용자 ID 가져오기
-Future<String> getUserId() async {
+// 사용자 DB ID 가져오기
+Future<int?> getUserDbId() async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('userId');
-    
-    if (userId != null && userId.isNotEmpty) {
-      return userId;
+    final userDbId = prefs.getInt('userDbId');
+
+    if (userDbId != null) {
+      return userDbId;
     } else {
-      return '1'; // 기본값
+      print('⚠️ 로그인한 사용자 DB ID가 없습니다.');
+      return null;
     }
   } catch (e) {
-    print('사용자 ID 가져오기 실패: $e');
-    return '1'; // 기본값
+    print('❌ 사용자 DB ID 가져오기 실패: $e');
+    return null;
   }
 }
 
@@ -135,133 +139,93 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     const SizedBox(width: 48), // 뒤로가기 버튼과 같은 너비
                   ],
                 ),
-              
-              // 캘린더 영역
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                      padding: const EdgeInsets.all(15),
-                      constraints: const BoxConstraints(
-                        maxHeight: 500,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.black, width: 2),
-                      ),
-                      child: TableCalendar(
-                        firstDay: DateTime(2020),
-                        lastDay: DateTime(2030),
-                        focusedDay: _focusedDay,
-                        selectedDayPredicate: (day) {
-                          return isSameDay(_selectedDay, day);
-                        },
-                        onDaySelected: (selectedDay, focusedDay) {
-                          setState(() {
-                            _selectedDay = selectedDay;
-                            _focusedDay = focusedDay;
-                          });
-                          _showScheduleDialog(selectedDay);
-                        },
-                        onPageChanged: (focusedDay) {
-                          setState(() {
-                            _focusedDay = focusedDay;
-                          });
-                        },
-                        calendarStyle: const CalendarStyle(
-                          todayDecoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                          ),
-                          selectedDecoration: BoxDecoration(
-                            color: Colors.black,
-                            shape: BoxShape.circle,
-                          ),
-                          defaultTextStyle: TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'DungGeunMo',
-                          ),
-                          weekendTextStyle: TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'DungGeunMo',
-                          ),
-                          outsideTextStyle: TextStyle(
-                            color: Colors.grey,
-                            fontFamily: 'DungGeunMo',
-                          ),
+
+                // 캘린더 영역
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                        padding: const EdgeInsets.all(15),
+                        constraints: const BoxConstraints(
+                          maxHeight: 500,
                         ),
-                        headerStyle: const HeaderStyle(
-                          titleTextStyle: TextStyle(
-                            color: Colors.black,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'DungGeunMo',
-                          ),
-                          leftChevronIcon: Icon(Icons.chevron_left, color: Colors.black),
-                          rightChevronIcon: Icon(Icons.chevron_right, color: Colors.black),
-                          formatButtonVisible: false,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.black, width: 2),
                         ),
-                        daysOfWeekStyle: const DaysOfWeekStyle(
-                          weekdayStyle: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'DungGeunMo',
+                        child: TableCalendar(
+                          firstDay: DateTime(2020),
+                          lastDay: DateTime(2030),
+                          focusedDay: _focusedDay,
+                          selectedDayPredicate: (day) {
+                            return isSameDay(_selectedDay, day);
+                          },
+                          onDaySelected: (selectedDay, focusedDay) {
+                            setState(() {
+                              _selectedDay = selectedDay;
+                              _focusedDay = focusedDay;
+                            });
+                            _showScheduleDialog(selectedDay);
+                          },
+                          onPageChanged: (focusedDay) {
+                            setState(() {
+                              _focusedDay = focusedDay;
+                            });
+                          },
+                          calendarStyle: const CalendarStyle(
+                            todayDecoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            selectedDecoration: BoxDecoration(
+                              color: Colors.black,
+                              shape: BoxShape.circle,
+                            ),
+                            defaultTextStyle: TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'DungGeunMo',
+                            ),
+                            weekendTextStyle: TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'DungGeunMo',
+                            ),
+                            outsideTextStyle: TextStyle(
+                              color: Colors.grey,
+                              fontFamily: 'DungGeunMo',
+                            ),
                           ),
-                          weekendStyle: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'DungGeunMo',
+                          headerStyle: const HeaderStyle(
+                            titleTextStyle: TextStyle(
+                              color: Colors.black,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'DungGeunMo',
+                            ),
+                            leftChevronIcon: Icon(Icons.chevron_left, color: Colors.black),
+                            rightChevronIcon: Icon(Icons.chevron_right, color: Colors.black),
+                            formatButtonVisible: false,
+                          ),
+                          daysOfWeekStyle: const DaysOfWeekStyle(
+                            weekdayStyle: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'DungGeunMo',
+                            ),
+                            weekendStyle: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'DungGeunMo',
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              
-              // 하단 Start 버튼
-              _buildBottomButtonSection(context),
-            ],
+              ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomButtonSection(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Center(
-        child: GestureDetector(
-          onTap: () {
-            // Start 버튼 클릭 시 QuestScreen으로 이동
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const QuestScreen()),
-            );
-          },
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Image.asset(
-                'assets/images/MainButton.png',
-                width: 280,
-                height: 80,
-              ),
-              const Text(
-                'Start',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'DungGeunMo',
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -270,11 +234,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   // 날짜별 일정 다이얼로그 표시
   Future<void> _showScheduleDialog(DateTime date) async {
-    final userId = await getUserId();
-    final schedules = await fetchSchedulesByDate(userId, date);
-    
+    final userDbId = await getUserDbId();
+    if (userDbId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('로그인이 필요합니다.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final schedules = await fetchSchedulesByDate(userDbId, date);
+
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -325,12 +299,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: schedule.isCompleted 
+                            color: schedule.isCompleted
                                 ? Colors.green.withOpacity(0.2)
                                 : Colors.grey.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: schedule.isCompleted 
+                              color: schedule.isCompleted
                                   ? Colors.green
                                   : Colors.grey,
                               width: 1,
@@ -340,10 +314,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             children: [
                               // 완료 상태 아이콘
                               Icon(
-                                schedule.isCompleted 
+                                schedule.isCompleted
                                     ? Icons.check_circle
                                     : Icons.radio_button_unchecked,
-                                color: schedule.isCompleted 
+                                color: schedule.isCompleted
                                     ? Colors.green
                                     : Colors.grey,
                                 size: 20,
@@ -356,7 +330,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontFamily: 'DungGeunMo',
-                                    color: schedule.isCompleted 
+                                    color: schedule.isCompleted
                                         ? Colors.green.shade900
                                         : Colors.black,
                                   ),
@@ -399,4 +373,3 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 }
-
