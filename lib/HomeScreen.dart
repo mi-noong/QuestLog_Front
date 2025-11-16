@@ -4,6 +4,7 @@ import 'shop.dart';
 import 'MyPageScreen.dart';
 import 'InventoryScreen.dart';
 import 'CalendarScreen.dart';
+import 'SettingBossScreen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -60,6 +61,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _loadUserGameInfo();
     // SharedPreferences에서 일정 목록 로드 (백엔드 호출 대신)
     _loadQuestsFromStorage();
+    // 배경음악 재생 (이미 재생 중이면 무시됨)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SoundManager().playBackgroundMusic();
+    });
   }
 
   @override
@@ -523,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       'height': 40.0
     }, // 슬롯 2: 좌측 중상단 원형 노드 (두 번째 일정)
     {
-      'alignment': Alignment(0.139, -0.325),
+      'alignment': Alignment(0.139, -0.345),
       'width': 40.0,
       'height': 40.0
     }, // 슬롯 3: 우측 중상단 원형 노드 (세 번째 일정)
@@ -675,22 +680,113 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 보스 스테이지 열기
   void _openBossStage(BuildContext context) {
     SoundManager().playClick();
-    // TODO: 보스 스테이지 화면으로 이동
-    // 현재는 BattleScreen으로 이동하되 보스 모드로 설정
-    // 보스 스테이지 화면이 있으면 해당 화면으로 이동
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('보스 스테이지가 열렸습니다!'),
-        backgroundColor: Colors.purple,
-        duration: Duration(seconds: 2),
-      ),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(20),
+          child: Container(
+            width: 300,
+            height: 200,
+            decoration: BoxDecoration(
+              image: const DecorationImage(
+                image: AssetImage('assets/images/map_row.png'),
+                fit: BoxFit.cover,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    '보스 스테이지에 \n도전하시겠습니까?',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 예 버튼
+                      GestureDetector(
+                        onTap: () {
+                          SoundManager().playClick();
+                          Navigator.of(context).pop();
+                          // 보스 RPG 화면으로 이동
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingBossScreen(),
+                            ),
+                          );
+                        },
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/MainButton.png',
+                              width: 100,
+                              height: 50,
+                            ),
+                            const Text(
+                              '예',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      // 아니오 버튼
+                      GestureDetector(
+                        onTap: () {
+                          SoundManager().playClick();
+                          Navigator.of(context).pop();
+                        },
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/MainButton.png',
+                              width: 100,
+                              height: 50,
+                            ),
+                            const Text(
+                              '아니오',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
-    // 보스 스테이지 화면으로 이동하는 코드 추가 필요
   }
 
   Widget _buildBottomButtonSection(BuildContext context) {
     final completedCount = completedQuestCount;
-    final isBossStageAvailable = completedCount >= 6;
+    final isBossStageAvailable = completedCount >= 4;
     
     return Container(
       padding: const EdgeInsets.all(11.0),
